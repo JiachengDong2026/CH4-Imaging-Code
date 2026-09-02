@@ -1,0 +1,20 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "CH4 Imaging Host (Qt Debug)",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/debug/CH4-Imaging-Control.exe",
+      "cwd": "${workspaceFolder}",
+      "environment": [
+        {"name": "PATH", "value": "C:/Qt/6.11.2/mingw_64/bin;C:/Qt/Tools/mingw1310_64/bin;${env:PATH}"}
+      ],
+      "MIMode": "gdb",
+      "miDebuggerPath": "C:/Qt/Tools/mingw1310_64/bin/gdb.exe",
+      "preLaunchTask": "CH4: Build Debug",
+      "externalConsole": false
+    }
+  ]
+}
+

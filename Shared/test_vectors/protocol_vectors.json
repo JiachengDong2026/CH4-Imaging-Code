@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "vectors": [
+    {
+      "name": "hello_request",
+      "valid": true,
+      "frame_hex": "A5 5A 01 01 00 01 01 34 12 00 00 68 90"
+    },
+    {
+      "name": "write_register_request",
+      "valid": true,
+      "frame_hex": "A5 5A 01 01 00 11 01 35 12 08 00 10 01 00 00 88 13 00 00 56 A8"
+    },
+    {
+      "name": "fused_point_stream",
+      "valid": true,
+      "frame_hex": "A5 5A 01 00 01 62 40 EF BE 30 00 EF CD AB 89 67 45 23 01 07 00 00 00 03 00 2A 00 00 E0 00 30 60 79 FE FF 40 0D 03 00 20 6C FB FF 80 1A 06 00 20 A1 07 00 C0 27 09 00 F9 00 09 00 37 AF"
+    },
+    {
+      "name": "hello_bad_crc",
+      "valid": false,
+      "frame_hex": "A5 5A 01 01 00 01 01 34 12 00 00 68 91"
+    }
+  ]
+}

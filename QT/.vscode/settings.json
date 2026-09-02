@@ -1,0 +1,15 @@
+{
+  "cmake.cmakePath": "C:/Qt/Tools/CMake_64/bin/cmake.exe",
+  "cmake.generator": "Ninja",
+  "cmake.configureOnOpen": false,
+  "cmake.sourceDirectory": "${workspaceFolder}",
+  "cmake.buildDirectory": "${workspaceFolder}/build/debug",
+  "C_Cpp.default.compileCommands": "${workspaceFolder}/build/debug/compile_commands.json",
+  "code-runner.cwd": "${workspaceFolder}",
+  "code-runner.runInTerminal": true,
+  "code-runner.saveFileBeforeRun": true,
+  "code-runner.executorMap": {
+    "cpp": "powershell -NoProfile -ExecutionPolicy Bypass -File \"${workspaceFolder}/tools/run.ps1\" -Config Debug"
+  }
+}
+

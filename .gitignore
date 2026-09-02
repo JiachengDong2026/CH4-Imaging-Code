@@ -1,0 +1,45 @@
+# Root-local generated/build outputs
+/.vs/
+/.vscode/*.log
+/Data/*
+!/Data/README.md
+
+# Qt / CMake
+/QT/build/
+/QT/dist/
+/QT/compile_commands.json
+/QT/.cache/
+**/CMakeFiles/
+**/CMakeCache.txt
+**/cmake_install.cmake
+**/CTestTestfile.cmake
+**/Testing/
+**/*_autogen/
+*.exe
+*.dll
+*.a
+*.o
+*.obj
+*.pdb
+
+# Vivado / FPGA simulation
+/FPGA/vivado/
+/FPGA/build/
+**/.Xil/
+*.jou
+*.log
+*.str
+*.wdb
+*.pb
+*.bit
+*.bin
+*.ltx
+
+# Python/editor
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.idea/
+*.user
+*.swp
+

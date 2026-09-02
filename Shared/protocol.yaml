@@ -1,0 +1,138 @@
+{
+  "schema_version": 1,
+  "protocol": {
+    "name": "CH4 Imaging Unified Application Protocol",
+    "version": 1,
+    "byte_order": "little",
+    "sof": [165, 90],
+    "header_bytes_without_sof": 9,
+    "frame_overhead_bytes": 13,
+    "max_application_payload": 4080,
+    "uart_max_payload": 1024,
+    "usb_max_payload": 4080,
+    "crc": {
+      "name": "CRC-16/CCITT-FALSE",
+      "polynomial": 4129,
+      "initial": 65535,
+      "reflect_input": false,
+      "reflect_output": false,
+      "xor_output": 0,
+      "coverage": "version through final payload byte",
+      "wire_order": "little"
+    }
+  },
+  "addresses": {
+    "host": 0,
+    "fpga": 1,
+    "broadcast": 255
+  },
+  "flags": {
+    "ACK_REQUIRED": 0,
+    "IS_RESPONSE": 1,
+    "HAS_ERROR": 2,
+    "MORE_FRAGMENTS": 3,
+    "FIRST_FRAGMENT": 4,
+    "LAST_FRAGMENT": 5,
+    "DATA_VALID": 6
+  },
+  "message_types": {
+    "HELLO": 1,
+    "HEARTBEAT": 2,
+    "TIME_QUERY": 3,
+    "CAPABILITY_QUERY": 4,
+    "READ_REG": 16,
+    "WRITE_REG": 17,
+    "READ_BLOCK": 18,
+    "WRITE_BLOCK": 19,
+    "VALIDATE_CONFIG": 32,
+    "COMMIT_CONFIG": 33,
+    "LOAD_DEFAULT_CONFIG": 34,
+    "START_SCAN": 48,
+    "STOP_SCAN": 49,
+    "STATIC_POINT": 50,
+    "RETURN_ZERO": 51,
+    "RETURN_SCAN_START": 52,
+    "START_ACQUISITION": 53,
+    "STOP_ACQUISITION": 54,
+    "STATUS_QUERY": 64,
+    "CLEAR_ERRORS": 65,
+    "STATS_QUERY": 66,
+    "STREAM_CONFIG": 80,
+    "STREAM_START": 81,
+    "STREAM_STOP": 82,
+    "IMAGE_BEGIN": 96,
+    "LINE_EVENT": 97,
+    "FUSED_POINT": 98,
+    "IMAGE_END": 99,
+    "ANGLE_SAMPLE": 112,
+    "HARMONIC_CURVE": 113,
+    "RAW_SAMPLES": 114
+  },
+  "status_codes": {
+    "OK": 0,
+    "BAD_VERSION": 1,
+    "BAD_CRC": 2,
+    "BAD_LENGTH": 3,
+    "WRONG_ADDRESS": 4,
+    "UNKNOWN_MESSAGE": 5,
+    "INVALID_REGISTER": 6,
+    "READ_ONLY": 7,
+    "OUT_OF_RANGE": 8,
+    "INVALID_COMBINATION": 9,
+    "DEVICE_BUSY": 10,
+    "INVALID_STATE": 11,
+    "NO_DATA": 12,
+    "BUFFER_OVERFLOW": 13,
+    "CONFIG_NOT_COMMITTED": 14,
+    "UNSUPPORTED": 15,
+    "INTERNAL_ERROR": 16
+  },
+  "capabilities": {
+    "UART_CONTROL": 0,
+    "UART_DATA": 1,
+    "USB_DATA": 2,
+    "MIRROR_CONTROL": 3,
+    "SIMULATION_SOURCE": 4,
+    "DILA": 5,
+    "FUSION": 6,
+    "RAW_DEBUG_STREAM": 7
+  },
+  "fragment_header": [
+    {"name": "total_length", "type": "u32", "offset": 0, "size": 4},
+    {"name": "fragment_index", "type": "u16", "offset": 4, "size": 2},
+    {"name": "fragment_count", "type": "u16", "offset": 6, "size": 2}
+  ],
+  "fused_point": {
+    "size": 48,
+    "fields": [
+      {"name": "measurement_time", "type": "u64", "offset": 0, "size": 8},
+      {"name": "image_id", "type": "u32", "offset": 8, "size": 4},
+      {"name": "line_id", "type": "u16", "offset": 12, "size": 2},
+      {"name": "point_id", "type": "u16", "offset": 14, "size": 2},
+      {"name": "x_angle_q13", "type": "i16", "offset": 16, "size": 2},
+      {"name": "y_angle_q13", "type": "i16", "offset": 18, "size": 2},
+      {"name": "i1", "type": "i32", "offset": 20, "size": 4},
+      {"name": "q1", "type": "i32", "offset": 24, "size": 4},
+      {"name": "i2", "type": "i32", "offset": 28, "size": 4},
+      {"name": "q2", "type": "i32", "offset": 32, "size": 4},
+      {"name": "a1", "type": "u32", "offset": 36, "size": 4},
+      {"name": "a2", "type": "u32", "offset": 40, "size": 4},
+      {"name": "flags", "type": "u16", "offset": 44, "size": 2},
+      {"name": "config_revision", "type": "u16", "offset": 46, "size": 2}
+    ]
+  },
+  "fused_point_flags": {
+    "X_REVERSE": 0,
+    "ENDPOINT": 1,
+    "LINE_TRANSITION": 2,
+    "FILTER_SETTLED": 3,
+    "ANGLE_VALID": 4,
+    "ANGLE_INTERPOLATED": 5,
+    "DILA_VALID": 6,
+    "A1_ABOVE_THRESHOLD": 7,
+    "LOW_CONFIDENCE": 8,
+    "OVERFLOW": 9
+  },
+  "response_rule": "A response keeps the request message type, sets IS_RESPONSE, echoes sequence, and starts payload with one status byte. HAS_ERROR is set when status is not OK."
+}
+
