@@ -1,109 +1,795 @@
 #include "app/main_window.h"
 
-#include "protocol/generated_protocol.h"
+#include "device/device_session.h"
+#include "protocol/generated_registers.h"
+#include "storage/session_recorder.h"
+#include "visualization/harmonic_widget.h"
+#include "visualization/methane_image_widget.h"
+#include "visualization/trajectory_widget.h"
 
+#include <QComboBox>
+#include <QCheckBox>
+#include <QAbstractSpinBox>
+#include <QDateTime>
+#include <QDoubleSpinBox>
+#include <QFormLayout>
 #include <QFrame>
+#include <QGridLayout>
+#include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLabel>
-#include <QListWidget>
+#include <QLocale>
+#include <QMessageBox>
+#include <QPlainTextEdit>
+#include <QPushButton>
+#include <QScrollArea>
+#include <QSpinBox>
+#include <QSplitter>
 #include <QStackedWidget>
 #include <QStatusBar>
+#include <QScrollBar>
+#include <QSyntaxHighlighter>
+#include <QTabBar>
+#include <QTextCharFormat>
+#include <QTextDocument>
+#include <QTimer>
+#include <QToolButton>
 #include <QVBoxLayout>
 
-namespace ch4::app {
+#include <cmath>
 
+namespace ch4::app {
 namespace {
-QLabel* heading(const QString& text) {
-    auto* label = new QLabel(text);
-    label->setObjectName(QStringLiteral("pageTitle"));
+
+QLabel* sectionTitle(const QString& text, QWidget* parent = nullptr) {
+    auto* label = new QLabel(text, parent);
+    label->setObjectName(QStringLiteral("sectionTitle"));
     return label;
 }
 
-QFrame* statusCard(const QString& title, const QString& value, const QString& note) {
-    auto* card = new QFrame;
-    card->setObjectName(QStringLiteral("card"));
-    auto* layout = new QVBoxLayout(card);
-    auto* titleLabel = new QLabel(title);
-    titleLabel->setObjectName(QStringLiteral("cardTitle"));
-    auto* valueLabel = new QLabel(value);
-    valueLabel->setObjectName(QStringLiteral("cardValue"));
-    auto* noteLabel = new QLabel(note);
-    noteLabel->setWordWrap(true);
-    noteLabel->setObjectName(QStringLiteral("secondary"));
-    layout->addWidget(titleLabel);
-    layout->addWidget(valueLabel);
-    layout->addWidget(noteLabel);
-    layout->addStretch();
-    return card;
-}
+QLabel* caption(const QString& text, QWidget* parent = nullptr) {
+    auto* label = new QLabel(text, parent);
+    label->setObjectName(QStringLiteral("caption"));
+    label->setWordWrap(true);
+    return label;
 }
 
-MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
-    setWindowTitle(QStringLiteral("甲烷扫描成像控制中心 — 阶段 0"));
-    resize(1180, 760);
-    setMinimumSize(920, 620);
-
-    auto* central = new QWidget;
-    auto* root = new QHBoxLayout(central);
-    root->setContentsMargins(0, 0, 0, 0);
-    root->setSpacing(0);
-
-    navigation_ = new QListWidget;
-    navigation_->setObjectName(QStringLiteral("navigation"));
-    navigation_->setFixedWidth(210);
-    navigation_->addItems({QStringLiteral("总览"), QStringLiteral("连接与设备"),
-                           QStringLiteral("快反镜"), QStringLiteral("采集与 DILA"),
-                           QStringLiteral("WMS 与仿真"), QStringLiteral("甲烷图像"),
-                           QStringLiteral("数据与日志")});
-
-    pages_ = new QStackedWidget;
-    pages_->addWidget(createOverviewPage());
-    pages_->addWidget(createPlaceholderPage(QStringLiteral("连接与设备"), QStringLiteral("阶段 1 接入 Mock 和 UART；阶段 2 接入 USB3.0。")));
-    pages_->addWidget(createPlaceholderPage(QStringLiteral("快反镜"), QStringLiteral("阶段 1 接入扫描参数、静态偏转、实际轨迹和回零控制。")));
-    pages_->addWidget(createPlaceholderPage(QStringLiteral("采集与 DILA"), QStringLiteral("阶段 1 接入仿真 ROM、1f/2f 解调参数和波形显示。")));
-    pages_->addWidget(createPlaceholderPage(QStringLiteral("WMS 与仿真"), QStringLiteral("当前只显示仿真参数；真实 DAC 和激光安全控制在阶段 3 实现。")));
-    pages_->addWidget(createPlaceholderPage(QStringLiteral("甲烷图像"), QStringLiteral("阶段 1 按实际反馈角度重建相对甲烷信号图像，不标注真实 ppm·m。")));
-    pages_->addWidget(createPlaceholderPage(QStringLiteral("数据与日志"), QStringLiteral("阶段 1 将每次会话写入项目 Data 目录，并显示通信与错误统计。")));
-    connect(navigation_, &QListWidget::currentRowChanged, pages_, &QStackedWidget::setCurrentIndex);
-    navigation_->setCurrentRow(0);
-
-    root->addWidget(navigation_);
-    root->addWidget(pages_, 1);
-    setCentralWidget(central);
-    statusBar()->showMessage(QStringLiteral("工程骨架已就绪；当前未连接设备"));
+QLabel* headerFieldLabel(const QString& text, QWidget* parent = nullptr) {
+    auto* label = new QLabel(text, parent);
+    label->setObjectName(QStringLiteral("headerFieldLabel"));
+    label->setFixedWidth(48);
+    label->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    return label;
 }
 
-QWidget* MainWindow::createOverviewPage() {
+QFrame* panel(const QString& objectName, QWidget* parent = nullptr) {
+    auto* frame = new QFrame(parent);
+    frame->setObjectName(objectName);
+    frame->setFrameShape(QFrame::StyledPanel);
+    return frame;
+}
+
+QWidget* scrollable(QWidget* content) {
+    auto* scroll = new QScrollArea;
+    scroll->setWidgetResizable(true);
+    scroll->setFrameShape(QFrame::NoFrame);
+    scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    content->setMinimumWidth(0);
+    content->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+    scroll->setWidget(content);
+    return scroll;
+}
+
+QWidget* numericEditor(QAbstractSpinBox* spin) {
+    // Fusion can hide built-in spinbox arrows when a form row is narrow.
+    // Keep a single, explicit button treatment for every numeric editor.
+    spin->setButtonSymbols(QAbstractSpinBox::NoButtons);
+    spin->setMinimumWidth(0);
+    spin->setMinimumHeight(34);
+    spin->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
+    auto* buttonColumn = new QWidget;
+    auto* buttonLayout = new QVBoxLayout(buttonColumn);
+    buttonLayout->setContentsMargins(0, 0, 0, 0);
+    buttonLayout->setSpacing(0);
+    auto* up = new QToolButton;
+    auto* down = new QToolButton;
+    up->setObjectName(QStringLiteral("numericStepButton"));
+    down->setObjectName(QStringLiteral("numericStepButton"));
+    up->setArrowType(Qt::UpArrow);
+    down->setArrowType(Qt::DownArrow);
+    up->setFixedSize(24, 17);
+    down->setFixedSize(24, 17);
+    up->setToolTip(QStringLiteral("Increase value"));
+    down->setToolTip(QStringLiteral("Decrease value"));
+    buttonLayout->addWidget(up);
+    buttonLayout->addWidget(down);
+    QObject::connect(up, &QToolButton::clicked, spin, &QAbstractSpinBox::stepUp);
+    QObject::connect(down, &QToolButton::clicked, spin, &QAbstractSpinBox::stepDown);
+    auto* editor = new QWidget;
+    auto* editorLayout = new QHBoxLayout(editor);
+    editorLayout->setContentsMargins(0, 0, 0, 0);
+    editorLayout->setSpacing(0);
+    editorLayout->addWidget(spin, 1);
+    editorLayout->addWidget(buttonColumn);
+    return editor;
+}
+
+QWidget* rangeEditor(QDoubleSpinBox* minimum, QDoubleSpinBox* maximum) {
+    auto* row = new QWidget;
+    auto* layout = new QHBoxLayout(row);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(4);
+    layout->addWidget(numericEditor(minimum), 1);
+    layout->addWidget(numericEditor(maximum), 1);
+    return row;
+}
+
+class LogHighlighter final : public QSyntaxHighlighter {
+public:
+    explicit LogHighlighter(QTextDocument* document) : QSyntaxHighlighter(document) {}
+private:
+    void highlightBlock(const QString& text) override {
+        const auto colorLevel = [this, &text](const QString& level, const QColor& color) {
+            const int position = text.indexOf(level);
+            if (position < 0) return;
+            QTextCharFormat format;
+            format.setForeground(color);
+            format.setFontWeight(QFont::DemiBold);
+            setFormat(position, level.size(), format);
+        };
+        colorLevel(QStringLiteral("ERROR"), QColor("#b42318"));
+        colorLevel(QStringLiteral("WARNING"), QColor("#9a6700"));
+        colorLevel(QStringLiteral("TX"), QColor("#175cd3"));
+        colorLevel(QStringLiteral("RX"), QColor("#087443"));
+        colorLevel(QStringLiteral("INFO"), QColor("#475467"));
+    }
+};
+
+}  // namespace
+
+MainWindow::MainWindow(QWidget* parent)
+    : QMainWindow(parent),
+      session_(new device::DeviceSession(this)),
+      recorder_(new storage::SessionRecorder(this)),
+      parameterPages_(new QStackedWidget),
+      parameterTabs_(new QTabBar),
+      viewTabs_(new QTabBar),
+      viewPages_(new QStackedWidget),
+      refreshTimer_(new QTimer(this)) {
+    setWindowTitle(QStringLiteral("CH4 Scan Imaging Console"));
+    resize(1540, 920);
+    setMinimumSize(1180, 720);
+
+    auto* root = new QWidget;
+    auto* rootLayout = new QVBoxLayout(root);
+    rootLayout->setContentsMargins(14, 12, 14, 14);
+    rootLayout->setSpacing(10);
+
+    auto* header = panel(QStringLiteral("appHeader"));
+    auto* headerLayout = new QHBoxLayout(header);
+    headerLayout->setContentsMargins(12, 8, 12, 8);
+    headerLayout->setSpacing(8);
+    auto* title = new QLabel(QStringLiteral("CH4 Scan Imaging"));
+    title->setObjectName(QStringLiteral("appTitle"));
+    title->setMinimumWidth(175);
+    headerLayout->addWidget(title);
+
+    modeBox_ = new QComboBox;
+    modeBox_->addItem(QStringLiteral("Mock demonstration"));
+    modeBox_->addItem(QStringLiteral("UART serial"));
+    modeBox_->setFixedWidth(120);
+    portBox_ = new QComboBox;
+    portBox_->setFixedWidth(94);
+    baudBox_ = new QComboBox;
+    const QList<QPair<QString, int>> baudRates = {{QStringLiteral("115200"), 115200},
+                                                  {QStringLiteral("230400"), 230400},
+                                                  {QStringLiteral("460800"), 460800},
+                                                  {QStringLiteral("921600"), 921600},
+                                                  {QStringLiteral("1500000"), 1500000},
+                                                  {QStringLiteral("2000000"), 2000000}};
+    for (const auto& baudRate : baudRates)
+        baudBox_->addItem(baudRate.first, baudRate.second);
+    baudBox_->setCurrentIndex(3);
+    baudBox_->setFixedWidth(82);
+    auto* refreshButton = new QPushButton(QStringLiteral("Refresh"));
+    refreshButton->setObjectName(QStringLiteral("secondaryButton"));
+    refreshButton->setFixedWidth(66);
+    connectButton_ = new QPushButton(QStringLiteral("Connect"));
+    connectButton_->setObjectName(QStringLiteral("primaryButton"));
+    connectButton_->setFixedWidth(90);
+    connectionLabel_ = new QLabel(QStringLiteral("● Disconnected"));
+    connectionLabel_->setObjectName(QStringLiteral("stateIdle"));
+    connectionLabel_->setMinimumWidth(190);
+    acquisitionLabel_ = new QLabel(QStringLiteral("● Idle"));
+    acquisitionLabel_->setObjectName(QStringLiteral("stateIdle"));
+    acquisitionLabel_->setMinimumWidth(76);
+    headerLayout->addWidget(headerFieldLabel(QStringLiteral("Source")));
+    headerLayout->addWidget(modeBox_);
+    headerLayout->addWidget(headerFieldLabel(QStringLiteral("Port")));
+    headerLayout->addWidget(portBox_);
+    headerLayout->addWidget(headerFieldLabel(QStringLiteral("Baud")));
+    headerLayout->addWidget(baudBox_);
+    headerLayout->addWidget(refreshButton);
+    headerLayout->addWidget(connectButton_);
+    headerLayout->addSpacing(8);
+    headerLayout->addWidget(connectionLabel_);
+    headerLayout->addWidget(acquisitionLabel_);
+    startButton_ = new QPushButton(QStringLiteral("Start acquisition"));
+    startButton_->setObjectName(QStringLiteral("primaryButton"));
+    stopButton_ = new QPushButton(QStringLiteral("Stop"));
+    stopButton_->setObjectName(QStringLiteral("dangerButton"));
+    startButton_->setEnabled(false);
+    stopButton_->setEnabled(false);
+    startButton_->setFixedWidth(138);
+    stopButton_->setFixedWidth(68);
+    headerLayout->addWidget(startButton_);
+    headerLayout->addWidget(stopButton_);
+    headerLayout->addStretch(1);
+    header->setMaximumHeight(72);
+    rootLayout->addWidget(header);
+
+    auto* body = new QSplitter(Qt::Horizontal);
+    body->setChildrenCollapsible(false);
+
+    auto* left = panel(QStringLiteral("sidePanel"));
+    left->setMinimumWidth(350);
+    left->setMaximumWidth(390);
+    auto* leftLayout = new QVBoxLayout(left);
+    leftLayout->setContentsMargins(12, 12, 12, 12);
+    leftLayout->setSpacing(6);
+    leftLayout->addWidget(sectionTitle(QStringLiteral("Device configuration")));
+
+    parameterTabs_->addTab(QStringLiteral("Scan"));
+    parameterTabs_->addTab(QStringLiteral("DILA"));
+    parameterTabs_->addTab(QStringLiteral("WMS"));
+    parameterTabs_->setExpanding(true);
+    parameterPages_->addWidget(scrollable(mirrorPage()));
+    parameterPages_->addWidget(scrollable(dilaPage()));
+    parameterPages_->addWidget(scrollable(wmsPage()));
+    leftLayout->addWidget(parameterTabs_);
+    leftLayout->addWidget(parameterPages_, 1);
+
+    auto* center = panel(QStringLiteral("workspacePanel"));
+    auto* centerLayout = new QVBoxLayout(center);
+    centerLayout->setContentsMargins(14, 12, 14, 14);
+    centerLayout->setSpacing(8);
+    auto* workspaceHeading = new QHBoxLayout;
+    workspaceHeading->addWidget(sectionTitle(QStringLiteral("Live workspace")));
+    workspaceHeading->addStretch();
+    clearViewButton_ = new QPushButton(QStringLiteral("Clear trajectory"));
+    clearViewButton_->setObjectName(QStringLiteral("secondaryButton"));
+    workspaceHeading->addWidget(clearViewButton_);
+    centerLayout->addLayout(workspaceHeading);
+
+    viewTabs_->addTab(QStringLiteral("Mirror trajectory"));
+    viewTabs_->addTab(QStringLiteral("1f / 2f harmonics"));
+    viewTabs_->addTab(QStringLiteral("Methane image"));
+    viewTabs_->setExpanding(true);
+    centerLayout->addWidget(viewTabs_);
+    trajectory_ = new visualization::TrajectoryWidget;
+    harmonic_ = new visualization::HarmonicWidget;
+    image_ = new visualization::MethaneImageWidget;
+    viewPages_->addWidget(trajectory_);
+    viewPages_->addWidget(harmonic_);
+    viewPages_->addWidget(image_);
+    centerLayout->addWidget(viewPages_, 1);
+    body->addWidget(left);
+    body->addWidget(center);
+
+    auto* right = panel(QStringLiteral("diagnosticsPanel"));
+    right->setMinimumWidth(300);
+    right->setMaximumWidth(340);
+    auto* rightLayout = new QVBoxLayout(right);
+    rightLayout->setContentsMargins(12, 12, 12, 12);
+    rightLayout->setSpacing(10);
+    rightLayout->addWidget(sectionTitle(QStringLiteral("Run diagnostics")));
+
+    rightLayout->addWidget(sectionTitle(QStringLiteral("Telemetry")));
+    auto* telemetry = new QWidget;
+    auto* telemetryLayout = new QGridLayout(telemetry);
+    telemetryLayout->setContentsMargins(0, 0, 0, 0);
+    telemetryLayout->setHorizontalSpacing(10);
+    telemetryLayout->setVerticalSpacing(3);
+    telemetryLayout->setColumnStretch(1, 1);
+    const auto addTelemetry = [telemetryLayout](int& row, const QString& name, QLabel*& value) {
+        auto* label = new QLabel(name);
+        label->setObjectName(QStringLiteral("telemetryLabel"));
+        value = new QLabel(QStringLiteral("0"));
+        value->setObjectName(QStringLiteral("telemetryValue"));
+        value->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        value->setMinimumWidth(112);
+        telemetryLayout->addWidget(label, row, 0);
+        telemetryLayout->addWidget(value, row++, 1);
+    };
+    const auto addTelemetrySection = [telemetryLayout](int& row, const QString& name) {
+        auto* label = new QLabel(name);
+        label->setObjectName(QStringLiteral("telemetrySection"));
+        telemetryLayout->addWidget(label, row++, 0, 1, 2);
+    };
+    int telemetryRow = 0;
+    addTelemetrySection(telemetryRow, QStringLiteral("PACKETS"));
+    addTelemetry(telemetryRow, QStringLiteral("Frames"), framesValue_);
+    addTelemetry(telemetryRow, QStringLiteral("CRC errors"), crcErrorsValue_);
+    addTelemetry(telemetryRow, QStringLiteral("Discarded"), discardedValue_);
+    addTelemetrySection(telemetryRow, QStringLiteral("MIRROR"));
+    addTelemetry(telemetryRow, QStringLiteral("X angle"), xAngleValue_);
+    addTelemetry(telemetryRow, QStringLiteral("Y angle"), yAngleValue_);
+    addTelemetrySection(telemetryRow, QStringLiteral("HARMONICS"));
+    addTelemetry(telemetryRow, QStringLiteral("1f"), oneFValue_);
+    addTelemetry(telemetryRow, QStringLiteral("2f"), twoFValue_);
+    addTelemetry(telemetryRow, QStringLiteral("2f/1f"), ratioValue_);
+    addTelemetrySection(telemetryRow, QStringLiteral("IMAGING"));
+    addTelemetry(telemetryRow, QStringLiteral("Valid cells"), validCellsValue_);
+    addTelemetry(telemetryRow, QStringLiteral("Image points"), imagePointsValue_);
+    rightLayout->addWidget(telemetry);
+
+    auto* eventHeading = new QHBoxLayout;
+    eventHeading->addWidget(sectionTitle(QStringLiteral("Event log")));
+    eventHeading->addStretch();
+    auto* clearLogButton = new QPushButton(QStringLiteral("Clear"));
+    clearLogButton->setObjectName(QStringLiteral("secondaryButton"));
+    eventHeading->addWidget(clearLogButton);
+    rightLayout->addLayout(eventHeading);
+    log_ = new QPlainTextEdit;
+    log_->setReadOnly(true);
+    log_->setMaximumBlockCount(1500);
+    log_->setPlaceholderText(QStringLiteral("Connection and acquisition events appear here."));
+    new LogHighlighter(log_->document());
+    rightLayout->addWidget(log_, 1);
+    body->addWidget(right);
+    body->setStretchFactor(0, 0);
+    body->setStretchFactor(1, 1);
+    body->setStretchFactor(2, 0);
+    body->setSizes({370, 840, 320});
+    rootLayout->addWidget(body, 1);
+    setCentralWidget(root);
+
+    connect(parameterTabs_, &QTabBar::currentChanged, parameterPages_, &QStackedWidget::setCurrentIndex);
+    connect(viewTabs_, &QTabBar::currentChanged, viewPages_, &QStackedWidget::setCurrentIndex);
+    connect(refreshButton, &QPushButton::clicked, this, &MainWindow::refreshPorts);
+    connect(connectButton_, &QPushButton::clicked, this, &MainWindow::toggleConnection);
+    connect(startButton_, &QPushButton::clicked, this, &MainWindow::startRun);
+    connect(stopButton_, &QPushButton::clicked, this, &MainWindow::stopRun);
+    connect(clearViewButton_, &QPushButton::clicked, this, &MainWindow::clearCurrentView);
+    connect(clearLogButton, &QPushButton::clicked, this, &MainWindow::clearLog);
+    connect(viewTabs_, &QTabBar::currentChanged, this, [this](int index) {
+        clearViewButton_->setText(index == 0 ? QStringLiteral("Clear trajectory")
+                                   : index == 1 ? QStringLiteral("Clear waveform")
+                                                : QStringLiteral("Clear image"));
+    });
+    connect(modeBox_, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int index) {
+        portBox_->setEnabled(index == 1);
+        baudBox_->setEnabled(index == 1);
+    });
+    connect(session_, &device::DeviceSession::connectionChanged, this,
+            [this](bool connected, const QString& detail) {
+                const bool mock = connected && modeBox_->currentIndex() == 0;
+                connectionLabel_->setText(connected ? (mock ? QStringLiteral("● Mock mode")
+                                                              : QStringLiteral("● Connected · %1").arg(detail))
+                                                     : QStringLiteral("● Disconnected"));
+                connectionLabel_->setObjectName(connected ? QStringLiteral("stateConnected") : QStringLiteral("stateIdle"));
+                connectionLabel_->style()->unpolish(connectionLabel_);
+                connectionLabel_->style()->polish(connectionLabel_);
+                connectButton_->setText(connected ? QStringLiteral("Disconnect") : QStringLiteral("Connect"));
+                modeBox_->setEnabled(!connected);
+                portBox_->setEnabled(!connected && modeBox_->currentIndex() == 1);
+                baudBox_->setEnabled(!connected && modeBox_->currentIndex() == 1);
+                connectButton_->setObjectName(connected ? QStringLiteral("secondaryButton") : QStringLiteral("primaryButton"));
+                connectButton_->style()->unpolish(connectButton_);
+                connectButton_->style()->polish(connectButton_);
+                startButton_->setEnabled(connected && !session_->running());
+                stopButton_->setEnabled(connected && session_->running());
+                if (!connected) {
+                    acquisitionLabel_->setText(QStringLiteral("● Idle"));
+                    acquisitionLabel_->setObjectName(QStringLiteral("stateIdle"));
+                }
+                statusBar()->showMessage(connected ? (mock ? QStringLiteral("Mock mode connected.")
+                                                             : QStringLiteral("Connected to %1.").arg(detail))
+                                                   : QStringLiteral("Disconnected."));
+            });
+    connect(session_, &device::DeviceSession::runningChanged, this,
+            [this](bool running) {
+                startButton_->setEnabled(session_->connected() && !running);
+                stopButton_->setEnabled(session_->connected() && running);
+                acquisitionLabel_->setText(running ? QStringLiteral("● Running") : QStringLiteral("● Idle"));
+                acquisitionLabel_->setObjectName(running ? QStringLiteral("stateRunning") : QStringLiteral("stateIdle"));
+                acquisitionLabel_->style()->unpolish(acquisitionLabel_);
+                acquisitionLabel_->style()->polish(acquisitionLabel_);
+                statusBar()->showMessage(running ? QStringLiteral("Acquisition started.") : QStringLiteral("Acquisition stopped."));
+            });
+    connect(session_, &device::DeviceSession::pointReceived, this, &MainWindow::onPoint);
+    connect(session_, &device::DeviceSession::angleSampleReceived, this, [this](const model::AngleSample& sample) {
+        trajectory_->append(sample.xDegrees(), sample.yDegrees());
+        xAngleValue_->setText(QStringLiteral("%1°").arg(sample.xDegrees(), 0, 'f', 3));
+        yAngleValue_->setText(QStringLiteral("%1°").arg(sample.yDegrees(), 0, 'f', 3));
+        dirty_ = true;
+    });
+    connect(session_, &device::DeviceSession::harmonicCurveReceived, this, [this](const model::HarmonicCurve& curve) {
+        const double amplitude1f = curve.amplitude1f();
+        const double amplitude2f = curve.amplitude2f();
+        harmonic_->appendRaw(curve.sampleIndex, amplitude1f, amplitude2f);
+        oneFValue_->setText(QString::number(amplitude1f, 'f', 3));
+        twoFValue_->setText(QString::number(amplitude2f, 'f', 3));
+        ratioValue_->setText(QString::number(amplitude1f == 0.0 ? 0.0 : amplitude2f / amplitude1f, 'f', 4));
+        dirty_ = true;
+    });
+    connect(session_, &device::DeviceSession::logMessage, this, &MainWindow::appendLog);
+    connect(session_, &device::DeviceSession::protocolStatsChanged, this,
+            [this](quint64 frames, quint64 crcErrors, quint64 discardedBytes) {
+                framesValue_->setText(QLocale().toString(frames));
+                crcErrorsValue_->setText(QLocale().toString(crcErrors));
+                discardedValue_->setText(QLocale().toString(discardedBytes));
+            });
+
+    refreshTimer_->setInterval(40);
+    connect(refreshTimer_, &QTimer::timeout, this, &MainWindow::refreshPlots);
+    refreshTimer_->start();
+    refreshPorts();
+    portBox_->setEnabled(false);
+    baudBox_->setEnabled(false);
+    image_->configure(50, lines_->value(), xMin_->value(), xMax_->value(), yMin_->value(), yMax_->value());
+    trajectory_->configureRange(xMin_->value(), xMax_->value(), yMin_->value(), yMax_->value());
+    statusBar()->showMessage(QStringLiteral("Ready. Connect a device or use mock demonstration mode."));
+}
+
+MainWindow::~MainWindow() {
+    session_->stop();
+    recorder_->stop();
+}
+
+QWidget* MainWindow::mirrorPage() {
     auto* page = new QWidget;
     auto* layout = new QVBoxLayout(page);
-    layout->setContentsMargins(32, 28, 32, 28);
-    layout->setSpacing(18);
-    layout->addWidget(heading(QStringLiteral("系统总览")));
-    auto* subtitle = new QLabel(QStringLiteral("阶段 0 · 工程骨架与统一协议已冻结"));
-    subtitle->setObjectName(QStringLiteral("secondary"));
-    layout->addWidget(subtitle);
+    layout->setContentsMargins(2, 2, 2, 2);
+    layout->setSpacing(6);
 
-    auto* cards = new QHBoxLayout;
-    cards->setSpacing(16);
-    cards->addWidget(statusCard(QStringLiteral("设备连接"), QStringLiteral("未连接"), QStringLiteral("阶段 1 提供 Mock 与真实串口模式")));
-    cards->addWidget(statusCard(QStringLiteral("协议"), QStringLiteral("V%1").arg(protocol::kVersion), QStringLiteral("A5 5A · 小端 · CRC-16/CCITT-FALSE")));
-    cards->addWidget(statusCard(QStringLiteral("成像量"), QStringLiteral("相对信号"), QStringLiteral("未标定前不显示真实浓度")));
-    layout->addLayout(cards);
+    auto angleSpinBox = [](double value) {
+        auto* spin = new QDoubleSpinBox;
+        spin->setRange(-4.0, 4.0);
+        spin->setDecimals(3);
+        spin->setSingleStep(0.1);
+        spin->setValue(value);
+        spin->setSuffix(QStringLiteral("°"));
+        return spin;
+    };
+    auto integerSpinBox = [](int minimum, int maximum, int value, const QString& suffix) {
+        auto* spin = new QSpinBox;
+        spin->setRange(minimum, maximum);
+        spin->setValue(value);
+        spin->setSuffix(suffix);
+        return spin;
+    };
+
+    auto* scanBox = new QGroupBox(QStringLiteral("Scan geometry"));
+    auto* form = new QFormLayout(scanBox);
+    form->setContentsMargins(8, 8, 8, 8);
+    form->setVerticalSpacing(4);
+    form->setHorizontalSpacing(8);
+    form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+    xMin_ = angleSpinBox(-1.0);
+    xMax_ = angleSpinBox(1.0);
+    yMin_ = angleSpinBox(-1.0);
+    yMax_ = angleSpinBox(1.0);
+    xFrequency_ = new QDoubleSpinBox;
+    xFrequency_->setRange(1.0, 20.0);
+    xFrequency_->setDecimals(3);
+    xFrequency_->setSingleStep(0.25);
+    xFrequency_->setValue(15.0);
+    xFrequency_->setSuffix(QStringLiteral(" Hz"));
+    frameFrequency_ = new QDoubleSpinBox;
+    frameFrequency_->setRange(0.001, 40.0);
+    frameFrequency_->setDecimals(3);
+    frameFrequency_->setSingleStep(0.1);
+    frameFrequency_->setValue(0.4);
+    frameFrequency_->setSuffix(QStringLiteral(" Hz"));
+    feedback_ = integerSpinBox(100, 2500, 2000, QStringLiteral(" Hz"));
+    lines_ = integerSpinBox(2, 2048, 75, QStringLiteral(" lines"));
+    lines_->setReadOnly(true);
+    streamRate_ = integerSpinBox(1, 2000, 500, QStringLiteral(" points/s"));
+    streamAngles_ = new QCheckBox(QStringLiteral("Send scan trajectory (angle)"));
+    streamAngles_->setChecked(true);
+    streamHarmonics_ = new QCheckBox(QStringLiteral("Send harmonic waveform (I/Q)"));
+    streamHarmonics_->setChecked(false);
+    scanPolicy_ = new QComboBox;
+    scanPolicy_->addItems({QStringLiteral("Frequency priority"), QStringLiteral("Waveform priority")});
+    scanPolicy_->setCurrentIndex(1);
+    stopAction_ = new QComboBox;
+    stopAction_->addItems({QStringLiteral("Hold position"), QStringLiteral("Return zero"), QStringLiteral("Return scan origin")});
+    form->addRow(QStringLiteral("X range"), rangeEditor(xMin_, xMax_));
+    form->addRow(QStringLiteral("Y range"), rangeEditor(yMin_, yMax_));
+    form->addRow(QStringLiteral("X frequency"), numericEditor(xFrequency_));
+    form->addRow(QStringLiteral("Mirror frame rate"), numericEditor(frameFrequency_));
+    form->addRow(QStringLiteral("Feedback rate"), numericEditor(feedback_));
+    form->addRow(QStringLiteral("Image lines"), numericEditor(lines_));
+    form->addRow(QString(), caption(QStringLiteral("Image lines are derived from floor(2 × X frequency / frame rate) to match the physical raster.")));
+    form->addRow(QStringLiteral("Stream rate"), numericEditor(streamRate_));
+    form->addRow(QStringLiteral("Data streams"), streamAngles_);
+    form->addRow(QString(), streamHarmonics_);
+    form->addRow(QString(), caption(QStringLiteral("Trajectory is sent only after valid fast-mirror feedback is received.")));
+    form->addRow(QStringLiteral("Scheduling"), scanPolicy_);
+    form->addRow(QStringLiteral("On stop"), stopAction_);
+    auto* applyButton = new QPushButton(QStringLiteral("Apply scan parameters"));
+    applyButton->setObjectName(QStringLiteral("primaryButton"));
+    form->addRow(QString(), applyButton);
+    connect(applyButton, &QPushButton::clicked, this, &MainWindow::applyMirrorConfig);
+    connect(streamAngles_, &QCheckBox::toggled, this, [this] { updateStreamRateRange(); session_->setStreamSelection(streamAngles_->isChecked(), streamHarmonics_->isChecked()); });
+    connect(streamHarmonics_, &QCheckBox::toggled, this, [this] { updateStreamRateRange(); session_->setStreamSelection(streamAngles_->isChecked(), streamHarmonics_->isChecked()); });
+    connect(xFrequency_, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this] { updateScanGeometry(); });
+    connect(frameFrequency_, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this] { updateScanGeometry(); });
+    updateScanGeometry();
+    updateStreamRateRange();
+    layout->addWidget(scanBox);
+
+    auto* staticBox = new QGroupBox(QStringLiteral("Static mirror offset"));
+    auto* staticForm = new QFormLayout(staticBox);
+    staticX_ = angleSpinBox(0.0);
+    staticY_ = angleSpinBox(0.0);
+    staticX_->setDecimals(4);
+    staticY_->setDecimals(4);
+    staticForm->addRow(QStringLiteral("X angle"), numericEditor(staticX_));
+    staticForm->addRow(QStringLiteral("Y angle"), numericEditor(staticY_));
+    auto* staticButton = new QPushButton(QStringLiteral("Set static offset"));
+    staticButton->setObjectName(QStringLiteral("secondaryButton"));
+    staticForm->addRow(QString(), staticButton);
+    connect(staticButton, &QPushButton::clicked, this, &MainWindow::applyStaticPoint);
+    layout->addWidget(staticBox);
+
+    auto* serviceBox = new QGroupBox(QStringLiteral("Device actions"));
+    auto* serviceLayout = new QGridLayout(serviceBox);
+    auto* statusButton = new QPushButton(QStringLiteral("Query status"));
+    auto* zeroButton = new QPushButton(QStringLiteral("Return zero"));
+    auto* originButton = new QPushButton(QStringLiteral("Return scan origin"));
+    serviceLayout->addWidget(statusButton, 0, 0, 1, 2);
+    serviceLayout->addWidget(zeroButton, 1, 0);
+    serviceLayout->addWidget(originButton, 1, 1);
+    connect(statusButton, &QPushButton::clicked, this, [this] { session_->queryStatus(); });
+    connect(zeroButton, &QPushButton::clicked, this, [this] { sendMirrorAction(0); });
+    connect(originButton, &QPushButton::clicked, this, [this] { sendMirrorAction(1); });
+    layout->addWidget(serviceBox);
     layout->addStretch();
     return page;
 }
 
-QWidget* MainWindow::createPlaceholderPage(const QString& title, const QString& description) {
+QWidget* MainWindow::dilaPage() {
     auto* page = new QWidget;
     auto* layout = new QVBoxLayout(page);
-    layout->setContentsMargins(32, 28, 32, 28);
-    layout->addWidget(heading(title));
-    auto* text = new QLabel(description);
-    text->setObjectName(QStringLiteral("secondary"));
-    text->setWordWrap(true);
-    layout->addWidget(text);
+    layout->setContentsMargins(2, 4, 2, 4);
+    layout->setSpacing(10);
+    layout->addWidget(caption(QStringLiteral("The current FPGA image pipeline uses the validated ROM baseline. These values are informational until runtime DILA tuning is exposed by firmware.")));
+
+    auto* pipelineBox = new QGroupBox(QStringLiteral("Active signal chain"));
+    auto* form = new QFormLayout(pipelineBox);
+    auto readOnly = [](const QString& value) {
+        auto* label = new QLabel(value);
+        label->setObjectName(QStringLiteral("readoutValue"));
+        return label;
+    };
+    form->addRow(QStringLiteral("Sampling rate"), readOnly(QStringLiteral("25.6 MSPS")));
+    form->addRow(QStringLiteral("Simulated sawtooth scan"), readOnly(QStringLiteral("2 kHz (25.6 MHz / 12800)")));
+    form->addRow(QStringLiteral("Reference modulation"), readOnly(QStringLiteral("200 kHz")));
+    form->addRow(QStringLiteral("CIC / FIR"), readOnly(QStringLiteral("x8 / x16 decimation")));
+    form->addRow(QStringLiteral("Feature window"), readOnly(QStringLiteral("160 ... 1440")));
+    layout->addWidget(pipelineBox);
     layout->addStretch();
     return page;
+}
+
+QWidget* MainWindow::wmsPage() {
+    auto* page = new QWidget;
+    auto* layout = new QVBoxLayout(page);
+    layout->setContentsMargins(2, 4, 2, 4);
+    layout->setSpacing(10);
+    layout->addWidget(caption(QStringLiteral("WMS metadata describes the calibrated simulation source. Hardware laser, DAC bias and safety limits are not yet controlled from this page.")));
+
+    auto* metadataBox = new QGroupBox(QStringLiteral("Simulation metadata"));
+    auto* form = new QFormLayout(metadataBox);
+    auto readOnly = [](const QString& value) {
+        auto* label = new QLabel(value);
+        label->setObjectName(QStringLiteral("readoutValue"));
+        return label;
+    };
+    form->addRow(QStringLiteral("Target gas"), readOnly(QStringLiteral("CH4")));
+    form->addRow(QStringLiteral("Concentration"), readOnly(QStringLiteral("5000 ppm")));
+    form->addRow(QStringLiteral("Temperature / pressure"), readOnly(QStringLiteral("296 K / 1 atm")));
+    form->addRow(QStringLiteral("Optical path / profile"), readOnly(QStringLiteral("1 m / Voigt")));
+    layout->addWidget(metadataBox);
+    layout->addStretch();
+    return page;
+}
+
+void MainWindow::refreshPorts() {
+    const QString current = portBox_->currentText();
+    portBox_->clear();
+    portBox_->addItems(device::DeviceSession::serialPorts());
+    const int index = portBox_->findText(current);
+    if (index >= 0)
+        portBox_->setCurrentIndex(index);
+}
+
+void MainWindow::toggleConnection() {
+    if (session_->connected()) {
+        session_->disconnectDevice();
+        return;
+    }
+
+    const auto mode = modeBox_->currentIndex() == 0 ? device::DeviceSession::Mode::Mock : device::DeviceSession::Mode::Serial;
+    const int baudRate = baudBox_->currentData().toInt();
+    if (!session_->connectDevice(mode, portBox_->currentText(), baudRate) && mode == device::DeviceSession::Mode::Serial) {
+        connectionLabel_->setText(QStringLiteral("● Connection error"));
+        connectionLabel_->setObjectName(QStringLiteral("stateError"));
+        connectionLabel_->style()->unpolish(connectionLabel_);
+        connectionLabel_->style()->polish(connectionLabel_);
+        statusBar()->showMessage(QStringLiteral("Connection error. Check the selected serial port."));
+        QMessageBox::warning(this, QStringLiteral("Connection failed"),
+                             QStringLiteral("Check that the selected serial port exists and is not in use."));
+    }
+}
+
+void MainWindow::startRun() {
+    if (session_->running())
+        return;
+    pointCount_ = 0;
+    trajectory_->clear();
+    harmonic_->clear();
+    image_->clear();
+    session_->setStreamSelection(streamAngles_->isChecked(), streamHarmonics_->isChecked());
+    const QString mode = modeBox_->currentIndex() == 0 ? QStringLiteral("mock") : QStringLiteral("uart");
+    if (!recorder_->start(mode))
+        appendLog(QStringLiteral("WARNING  Unable to create the session record."));
+    else
+        appendLog(QStringLiteral("INFO  Session data: %1").arg(recorder_->directory()));
+    session_->start();
+}
+
+void MainWindow::stopRun() {
+    session_->stop();
+    recorder_->stop();
+}
+
+void MainWindow::clearCurrentView() {
+    switch (viewTabs_->currentIndex()) {
+    case 0: clearTrajectory(); break;
+    case 1: clearHarmonics(); break;
+    case 2: clearImage(); break;
+    default: break;
+    }
+}
+
+void MainWindow::clearTrajectory() {
+    trajectory_->clear();
+    dirty_ = true;
+}
+
+void MainWindow::clearHarmonics() {
+    harmonic_->clear();
+    dirty_ = true;
+}
+
+void MainWindow::clearImage() {
+    image_->clear();
+    pointCount_ = 0;
+    dirty_ = true;
+}
+
+void MainWindow::clearLog() {
+    log_->clear();
+}
+
+void MainWindow::onPoint(const model::FusedPoint& point) {
+    if (!streamAngles_->isChecked() || !streamHarmonics_->isChecked())
+        return;
+    mirrorFeedbackActive_ = (point.flags & 0x0010u) != 0;
+    ++pointCount_;
+    image_->add(point);
+    recorder_->append(point);
+    dirty_ = true;
+}
+
+void MainWindow::appendLog(const QString& text) {
+    if (log_) {
+        auto* scrollbar = log_->verticalScrollBar();
+        const bool followTail = scrollbar->value() >= scrollbar->maximum();
+        log_->appendPlainText(QStringLiteral("[%1] %2")
+                                  .arg(QDateTime::currentDateTime().toString(QStringLiteral("HH:mm:ss.zzz")), text));
+        if (followTail)
+            scrollbar->setValue(scrollbar->maximum());
+    }
+}
+
+void MainWindow::refreshPlots() {
+    if (!dirty_)
+        return;
+    trajectory_->update();
+    harmonic_->update();
+    image_->update();
+    validCellsValue_->setText(streamAngles_->isChecked() && streamHarmonics_->isChecked()
+                                  ? QLocale().toString(image_->validCells()) : QStringLiteral("—"));
+    imagePointsValue_->setText(streamAngles_->isChecked() && streamHarmonics_->isChecked()
+                                   ? QLocale().toString(pointCount_) : QStringLiteral("—"));
+    dirty_ = false;
+}
+
+void MainWindow::applyMirrorConfig() {
+    if (xMin_->value() >= xMax_->value() || yMin_->value() >= yMax_->value()) {
+        QMessageBox::warning(this, QStringLiteral("Invalid scan range"),
+                             QStringLiteral("The minimum angle must be smaller than the maximum angle."));
+        return;
+    }
+    if (frameFrequency_->value() > xFrequency_->value() * 2.0) {
+        QMessageBox::warning(this, QStringLiteral("Invalid frame rate"),
+                             QStringLiteral("Mirror frame rate must not exceed twice the X frequency."));
+        return;
+    }
+
+    using Register = registers::Address;
+    const auto toQ13 = [](double degrees) {
+        return qint16(qBound(-32768LL, qRound64(degrees * 8192.0), 32767LL));
+    };
+    const qint16 xMinimum = toQ13(xMin_->value());
+    const qint16 xMaximum = toQ13(xMax_->value());
+    const qint16 yMinimum = toQ13(yMin_->value());
+    const qint16 yMaximum = toQ13(yMax_->value());
+    session_->writeRegister(quint32(Register::MirrorXMinQ13), quint32(quint16(xMinimum)));
+    session_->writeRegister(quint32(Register::MirrorXMaxQ13), quint32(quint16(xMaximum)));
+    session_->writeRegister(quint32(Register::MirrorYMinQ13), quint32(quint16(yMinimum)));
+    session_->writeRegister(quint32(Register::MirrorYMaxQ13), quint32(quint16(yMaximum)));
+    session_->writeRegister(quint32(Register::MirrorXFreqMhz), quint32(qRound64(xFrequency_->value() * 1000.0)));
+    session_->writeRegister(quint32(Register::MirrorFrameFreqMhz), quint32(qRound64(frameFrequency_->value() * 1000.0)));
+    session_->writeRegister(quint32(Register::MirrorFeedbackHz), quint32(feedback_->value()));
+    session_->writeRegister(quint32(Register::ScanPolicy), quint32(scanPolicy_->currentIndex()));
+    session_->writeRegister(quint32(Register::StopAction), quint32(stopAction_->currentIndex()));
+    session_->writeRegister(quint32(Register::ImageLineCount), quint32(lines_->value()));
+    session_->writeRegister(quint32(Register::StreamRateLimitHz), quint32(streamRate_->value()));
+    session_->validateAndCommit();
+    image_->configure(50, lines_->value(), xMin_->value(), xMax_->value(), yMin_->value(), yMax_->value());
+    trajectory_->configureRange(xMin_->value(), xMax_->value(), yMin_->value(), yMax_->value());
+    statusBar()->showMessage(QStringLiteral("Scan parameters applied."));
+    appendLog(QStringLiteral("INFO  Scan parameters applied: X %1 Hz, frame %2 Hz, %3 image lines, %4.")
+                   .arg(xFrequency_->value(), 0, 'f', 3)
+                   .arg(frameFrequency_->value(), 0, 'f', 3)
+                   .arg(lines_->value())
+                   .arg(scanPolicy_->currentText()));
+}
+
+void MainWindow::updateScanGeometry() {
+    const double xFrequency = xFrequency_->value();
+    // The image path has a 2..2048-line geometry.  Bound the selectable frame
+    // rate so its physical raster line count always fits that geometry.
+    const double minimumFrameRate = qMax(0.001, 2.0 * xFrequency / 2048.0);
+    const double maximumFrameRate = qMin(40.0, xFrequency);
+    frameFrequency_->setRange(minimumFrameRate, maximumFrameRate);
+    const int physicalLines = qBound(2, static_cast<int>(std::floor(
+        (2.0 * xFrequency) / frameFrequency_->value())), 2048);
+    lines_->setValue(physicalLines);
+}
+
+void MainWindow::updateStreamRateRange() {
+    // A 48-byte fused frame exceeds 921600 baud at 2 kHz.  Single-stream
+    // operation is safe at 2 kHz; keep the legacy 500 Hz cap for fused data.
+    const int maximumRate = streamAngles_->isChecked() && streamHarmonics_->isChecked() ? 500 : 2000;
+    streamRate_->setMaximum(maximumRate);
+    if (streamRate_->value() > maximumRate)
+        streamRate_->setValue(maximumRate);
+}
+
+void MainWindow::applyStaticPoint() {
+    const auto toQ13 = [](double degrees) {
+        return qint16(qBound(-32768LL, qRound64(degrees * 8192.0), 32767LL));
+    };
+    session_->staticPoint(toQ13(staticX_->value()), toQ13(staticY_->value()));
+    appendLog(QStringLiteral("INFO  Static offset sent: X %1 deg, Y %2 deg.")
+                  .arg(staticX_->value(), 0, 'f', 4)
+                  .arg(staticY_->value(), 0, 'f', 4));
+}
+
+void MainWindow::sendMirrorAction(int action) {
+    if (action == 0) {
+        session_->returnZero();
+        appendLog(QStringLiteral("INFO  Return-zero command sent."));
+    } else {
+        session_->returnScanStart();
+        appendLog(QStringLiteral("INFO  Return-to-origin command sent."));
+    }
 }
 
 }  // namespace ch4::app

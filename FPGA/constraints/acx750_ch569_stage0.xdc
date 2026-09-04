@@ -13,7 +13,10 @@ set_property IOSTANDARD LVCMOS33 [get_ports uart_rxd]
 set_property PACKAGE_PIN M21 [get_ports uart_txd]
 set_property IOSTANDARD LVCMOS33 [get_ports uart_txd]
 
-# Fast-mirror differential pins C18/C19 and E19/D19 are reserved for stage 1.
-# They are deliberately not constrained until the external RS-422 transceiver,
-# polarity, termination, and bank voltage have been checked on the real board.
-
+# Fast-mirror device-side differential UART, matching uart_bridge_v4.
+set_property PACKAGE_PIN C18 [get_ports mirror_rxd_p]
+set_property PACKAGE_PIN C19 [get_ports mirror_rxd_n]
+set_property IOSTANDARD LVDS_25 [get_ports {mirror_rxd_p mirror_rxd_n}]
+set_property PACKAGE_PIN E19 [get_ports mirror_txd_p]
+set_property PACKAGE_PIN D19 [get_ports mirror_txd_n]
+set_property IOSTANDARD LVDS_25 [get_ports {mirror_txd_p mirror_txd_n}]

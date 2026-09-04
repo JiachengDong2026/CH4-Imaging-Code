@@ -25,6 +25,7 @@ enum class Address : std::uint16_t {
     StopAction = 0x0120,
     StaticXQ13 = 0x0124,
     StaticYQ13 = 0x0128,
+    MirrorFrameFreqMhz = 0x012C,
     SampleSource = 0x0200,
     SampleRateHz = 0x0204,
     SimDatasetId = 0x0208,

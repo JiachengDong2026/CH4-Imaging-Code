@@ -7,6 +7,7 @@ module tb_app_frame_rx;
     wire frame_valid, frame_error, crc_error, length_error, version_error;
     wire [7:0] frame_version, frame_dst, frame_src, frame_type, frame_flags;
     wire [15:0] frame_sequence, frame_payload_length;
+    wire payload_valid;wire[11:0]payload_index;wire[7:0]payload_data;
     reg [7:0] hello_bytes[0:12];
     reg [7:0] write_bytes[0:20];
     reg [7:0] fused_bytes[0:60];
@@ -28,6 +29,7 @@ module tb_app_frame_rx;
 
     app_frame_rx dut(
         .clk(clk),.rst(rst),.byte_valid(byte_valid),.byte_data(byte_data),
+        .payload_valid(payload_valid),.payload_index(payload_index),.payload_data(payload_data),
         .frame_valid(frame_valid),.frame_error(frame_error),.crc_error(crc_error),
         .length_error(length_error),.version_error(version_error),
         .frame_version(frame_version),.frame_dst(frame_dst),.frame_src(frame_src),

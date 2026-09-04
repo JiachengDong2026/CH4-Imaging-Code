@@ -121,6 +121,32 @@
       {"name": "config_revision", "type": "u16", "offset": 46, "size": 2}
     ]
   },
+  "harmonic_curve": {
+    "size": 28,
+    "fields": [
+      {"name": "measurement_time", "type": "u64", "offset": 0, "size": 8},
+      {"name": "sample_index", "type": "u32", "offset": 8, "size": 4},
+      {"name": "i1", "type": "i32", "offset": 12, "size": 4},
+      {"name": "q1", "type": "i32", "offset": 16, "size": 4},
+      {"name": "i2", "type": "i32", "offset": 20, "size": 4},
+      {"name": "q2", "type": "i32", "offset": 24, "size": 4}
+    ]
+  },
+  "angle_sample": {
+    "size": 16,
+    "fields": [
+      {"name": "measurement_time", "type": "u64", "offset": 0, "size": 8},
+      {"name": "sample_index", "type": "u32", "offset": 8, "size": 4},
+      {"name": "x_angle_q13", "type": "i16", "offset": 12, "size": 2},
+      {"name": "y_angle_q13", "type": "i16", "offset": 14, "size": 2}
+    ]
+  },
+  "stream_config": {
+    "size": 1,
+    "fields": [
+      {"name": "stream_mask", "type": "u8", "offset": 0, "size": 1, "description": "bit0: angle sample, bit1: harmonic I/Q"}
+    ]
+  },
   "fused_point_flags": {
     "X_REVERSE": 0,
     "ENDPOINT": 1,
@@ -131,8 +157,8 @@
     "DILA_VALID": 6,
     "A1_ABOVE_THRESHOLD": 7,
     "LOW_CONFIDENCE": 8,
-    "OVERFLOW": 9
+    "OVERFLOW": 9,
+    "SIMULATED_TRAJECTORY": 10
   },
   "response_rule": "A response keeps the request message type, sets IS_RESPONSE, echoes sequence, and starts payload with one status byte. HAS_ERROR is set when status is not OK."
 }
-

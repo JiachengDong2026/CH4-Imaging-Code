@@ -5,24 +5,54 @@
       "label": "CH4: Build Debug",
       "type": "shell",
       "command": "powershell",
-      "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/tools/build.ps1", "-Config", "Debug", "-Test"],
-      "group": {"kind": "build", "isDefault": true},
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/tools/build.ps1",
+        "-Config",
+        "Debug",
+        "-Test"
+      ],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
       "problemMatcher": ["$gcc"]
     },
     {
       "label": "CH4: Build Release",
       "type": "shell",
       "command": "powershell",
-      "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/tools/build.ps1", "-Config", "Release", "-Test"],
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/tools/build.ps1",
+        "-Config",
+        "Release",
+        "-Test"
+      ],
+      "group": {
+        "kind": "build",
+        "isDefault": false
+      },
       "problemMatcher": ["$gcc"]
     },
     {
       "label": "CH4: Package Release",
       "type": "shell",
       "command": "powershell",
-      "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/tools/package.ps1"],
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/tools/package.ps1"
+      ],
       "problemMatcher": []
     }
   ]
 }
-

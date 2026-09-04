@@ -22,4 +22,4 @@ close $handle
 if {[string first "FPGA_PROTOCOL_TEST_PASS" $sim_text] < 0} {
     error "FPGA protocol simulation did not report PASS; see $sim_log"
 }
-puts "FPGA_STAGE0_PROTOCOL_SIM_PASS"
+puts "FPGA_PROTOCOL_SIM_PASS"

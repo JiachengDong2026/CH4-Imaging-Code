@@ -27,6 +27,7 @@
     {"name":"STOP_ACTION", "address":288, "access":"shadow", "reset":0, "min":0, "max":2},
     {"name":"STATIC_X_Q13", "address":292, "access":"shadow", "reset":0},
     {"name":"STATIC_Y_Q13", "address":296, "access":"shadow", "reset":0},
+    {"name":"MIRROR_FRAME_FREQ_MHZ", "address":300, "access":"shadow", "reset":500, "min":1, "max":40000, "description":"full raster frame frequency in mHz; must not exceed twice MIRROR_X_FREQ_MHZ"},
 
     {"name":"SAMPLE_SOURCE", "address":512, "access":"shadow", "reset":1, "min":0, "max":5},
     {"name":"SAMPLE_RATE_HZ", "address":516, "access":"shadow", "reset":64000, "min":1000, "max":50000000},
@@ -54,7 +55,7 @@
     {"name":"IMAGE_HEIGHT", "address":1044, "access":"shadow", "reset":64, "min":2, "max":2048},
 
     {"name":"STREAM_MASK", "address":1280, "access":"shadow", "reset":1},
-    {"name":"STREAM_RATE_LIMIT_HZ", "address":1284, "access":"shadow", "reset":500, "min":1, "max":1000000},
+    {"name":"STREAM_RATE_LIMIT_HZ", "address":1284, "access":"shadow", "reset":2000, "min":1, "max":2000, "description":"maximum 2 kHz WMS feature cadence; use 2 kHz only when a single data stream is enabled on 921600-baud UART"},
     {"name":"UART_PAYLOAD_LIMIT", "address":1288, "access":"ro", "reset":1024},
     {"name":"USB_PAYLOAD_LIMIT", "address":1292, "access":"ro", "reset":4080},
 

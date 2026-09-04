@@ -11,6 +11,9 @@ module app_frame_rx #(
     input wire rst,
     input wire byte_valid,
     input wire [7:0] byte_data,
+    output reg payload_valid,
+    output reg [11:0] payload_index,
+    output reg [7:0] payload_data,
     output reg frame_valid,
     output reg frame_error,
     output reg crc_error,
@@ -53,8 +56,10 @@ module app_frame_rx #(
             crc_error<=0; length_error<=0; version_error<=0;
             frame_version<=0; frame_dst<=0; frame_src<=0; frame_type<=0;
             frame_flags<=0; frame_sequence<=0; frame_payload_length<=0;
+            payload_valid<=0;payload_index<=0;payload_data<=0;
         end else begin
             frame_valid<=0; frame_error<=0; crc_error<=0; length_error<=0; version_error<=0;
+            payload_valid<=0;
             if(byte_valid) begin
                 case(state)
                     WAIT_A5: if(byte_data==`CH4_SOF0) state<=WAIT_5A;
@@ -89,6 +94,7 @@ module app_frame_rx #(
                     end
                     PAYLOAD: begin
                         crc_value<=crc16_byte(crc_value,byte_data);
+                        payload_valid<=1;payload_index<=payload_count[11:0];payload_data<=byte_data;
                         if(payload_count+1'b1>=frame_payload_length) state<=CRC_LOW;
                         payload_count<=payload_count+1'b1;
                     end

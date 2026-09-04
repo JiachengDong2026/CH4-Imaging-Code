@@ -12,6 +12,8 @@ inline constexpr std::uint16_t kUsbMaxPayload = 4080;
 inline constexpr std::uint16_t kMaxPayload = 4080;
 inline constexpr std::size_t kFrameOverhead = 13;
 inline constexpr std::size_t kFusedPointSize = 48;
+inline constexpr std::size_t kAngleSampleSize = 16;
+inline constexpr std::size_t kHarmonicCurveSize = 28;
 
 enum class Address : std::uint8_t {
     Host = 0x00,
@@ -94,6 +96,7 @@ enum class FusedPointFlag : std::uint16_t {
     A1AboveThreshold = 1u << 7,
     LowConfidence = 1u << 8,
     Overflow = 1u << 9,
+    SimulatedTrajectory = 1u << 10,
 };
 
 }  // namespace ch4::protocol

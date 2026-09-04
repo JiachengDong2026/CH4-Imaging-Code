@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('All', 'Generate', 'Test', 'Qt', 'Fpga', 'Package')]
+    [ValidateSet('All', 'Generate', 'Test', 'Qt', 'Fpga', 'Bitstream', 'Package')]
     [string]$Target = 'All',
     [ValidateSet('Debug', 'Release')]
     [string]$Config = 'Debug'
@@ -24,7 +24,7 @@ function Invoke-QtBuild {
 }
 
 function Invoke-FpgaBuild {
-    & (Join-Path $ProjectRoot 'FPGA/scripts/build.ps1') -RunProtocolTest
+    & (Join-Path $ProjectRoot 'FPGA/scripts/build.ps1') -RunTests
 }
 
 switch ($Target) {
@@ -42,6 +42,10 @@ switch ($Target) {
         Invoke-Generator
         Invoke-FpgaBuild
     }
+    'Bitstream' {
+        Invoke-Generator
+        & (Join-Path $ProjectRoot 'FPGA/scripts/build.ps1') -Bitstream
+    }
     'Package' {
         Invoke-Generator
         & (Join-Path $ProjectRoot 'QT/tools/package.ps1')
@@ -54,5 +58,4 @@ switch ($Target) {
     }
 }
 
-Write-Host "阶段 0 目标 '$Target' 完成。" -ForegroundColor Green
-
+Write-Host "项目目标 '$Target' 完成。" -ForegroundColor Green

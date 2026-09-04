@@ -66,14 +66,21 @@ def validate(protocol: dict, register_map: dict) -> None:
     if any(bit < 0 or bit > 7 for bit in protocol["flags"].values()):
         raise ValueError("flag bits must be in [0, 7]")
 
-    fields = protocol["fused_point"]["fields"]
-    cursor = 0
-    for field in fields:
-        if field["offset"] != cursor:
-            raise ValueError(f"fused point gap/overlap before {field['name']}")
-        cursor += field["size"]
-    if cursor != protocol["fused_point"]["size"] or cursor != 48:
+    def validate_payload(name: str) -> None:
+        fields = protocol[name]["fields"]
+        cursor = 0
+        for field in fields:
+            if field["offset"] != cursor:
+                raise ValueError(f"{name} gap/overlap before {field['name']}")
+            cursor += field["size"]
+        if cursor != protocol[name]["size"]:
+            raise ValueError(f"{name} size is inconsistent")
+
+    validate_payload("fused_point")
+    if protocol["fused_point"]["size"] != 48:
         raise ValueError("fused point must remain exactly 48 bytes")
+    for payload_name in ("angle_sample", "harmonic_curve", "stream_config"):
+        validate_payload(payload_name)
 
     registers = register_map["registers"]
     names = [reg["name"] for reg in registers]
@@ -108,6 +115,8 @@ def render_cpp_protocol(spec: dict) -> str:
         f"inline constexpr std::uint16_t kMaxPayload = {settings['max_application_payload']};",
         f"inline constexpr std::size_t kFrameOverhead = {settings['frame_overhead_bytes']};",
         f"inline constexpr std::size_t kFusedPointSize = {spec['fused_point']['size']};",
+        f"inline constexpr std::size_t kAngleSampleSize = {spec['angle_sample']['size']};",
+        f"inline constexpr std::size_t kHarmonicCurveSize = {spec['harmonic_curve']['size']};",
         "",
         "enum class Address : std::uint8_t {",
     ]
@@ -157,6 +166,8 @@ def render_verilog(spec: dict, register_map: dict) -> str:
         f"`define CH4_UART_MAX_PAYLOAD {settings['uart_max_payload']}",
         f"`define CH4_USB_MAX_PAYLOAD {settings['usb_max_payload']}",
         f"`define CH4_FUSED_POINT_SIZE {spec['fused_point']['size']}",
+        f"`define CH4_ANGLE_SAMPLE_SIZE {spec['angle_sample']['size']}",
+        f"`define CH4_HARMONIC_CURVE_SIZE {spec['harmonic_curve']['size']}",
         "",
     ]
     for name, bit in spec["flags"].items():
@@ -207,14 +218,14 @@ def markdown_protocol(spec: dict) -> str:
     lines += ["", "## 状态码", "", "| 名称 | 值 |", "|---|---:|"]
     for name, value in spec["status_codes"].items():
         lines.append(f"| `{name}` | `0x{value:02X}` |")
+    for title, payload_name in (("48 字节融合点", "fused_point"), ("角度样本（0x70）", "angle_sample"),
+                                ("谐波 I/Q 样本（0x71）", "harmonic_curve"), ("数据流选择（0x50）", "stream_config")):
+        lines += ["", f"## {title}", "", "| 偏移 | 大小 | 类型 | 字段 |", "|---:|---:|---|---|"]
+        for field in spec[payload_name]["fields"]:
+            lines.append(f"| {field['offset']} | {field['size']} | `{field['type']}` | `{field['name']}` |")
     lines += [
-        "", "## 48 字节融合点", "",
-        "| 偏移 | 大小 | 类型 | 字段 |", "|---:|---:|---|---|",
-    ]
-    for field in spec["fused_point"]["fields"]:
-        lines.append(f"| {field['offset']} | {field['size']} | `{field['type']}` | `{field['name']}` |")
-    lines += [
-        "", "融合点坐标是实际反馈插值得到的 Q13 角度；`A2/A1` 由上位机计算，不在 FPGA 内做除法。",
+        "", "角度和谐波可独立启用。仅同时启用两者时 FPGA 发送融合点，且上位机显示融合图像。融合点中的 `a1/a2` 为兼容保留字段；上位机应使用其中的 `I/Q` 计算幅值。",
+        "谐波帧传输原始 `I/Q`；`sqrt(I²+Q²)` 及 `A2/A1` 均由上位机计算，避免 FPGA 平方根的数据通路和时序负担。",
         "", "## 分片", "",
         "超过传输通道单帧上限的数据必须分片。分片 payload 前 8 字节依次为 `total_length:u32`、`fragment_index:u16`、`fragment_count:u16`。",
         "首片/末片分别设置 `FIRST_FRAGMENT` / `LAST_FRAGMENT`，仍有后续片时设置 `MORE_FRAGMENTS`。",
