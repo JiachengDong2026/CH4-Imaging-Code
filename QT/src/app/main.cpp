@@ -33,9 +33,19 @@ int main(int argc, char* argv[]) {
         QPushButton:hover { background: #e8f0f4; border-color: #285a75; }
         QPushButton:pressed { background: #d6e5ec; }
         QPushButton:disabled { color: #9aa4aa; background: #eef0f1; border-color: #d5dadd; }
+        QToolButton { background: #fafafa; border: 1px solid #aeb8bf; border-radius: 2px; padding: 0px; }
+        QToolButton:hover { background: #e8f0f4; border-color: #285a75; }
+        QToolButton:pressed { background: #d6e5ec; }
+        QToolButton:disabled { color: #9aa4aa; background: #eef0f1; border-color: #d5dadd; }
         #numericStepButton { background: #f7f9fa; border: 1px solid #b9c1c7; border-radius: 0px; padding: 0px; min-height: 0px; }
         #numericStepButton:hover { background: #dcebf3; border-color: #285a75; }
         #numericStepButton:pressed { background: #c6dce8; }
+        #comboWithoutArrow { border-top-right-radius: 0px; border-bottom-right-radius: 0px; padding-right: 6px; }
+        #comboWithoutArrow::drop-down { width: 0px; border: none; }
+        #comboWithoutArrow::down-arrow { image: none; }
+        #comboArrowButton { background: #f7f9fa; border: 1px solid #b9c1c7; border-left: 0px; border-radius: 0px; padding: 0px; }
+        #comboArrowButton:hover { background: #dcebf3; border-color: #285a75; }
+        #comboArrowButton:pressed { background: #c6dce8; }
         #primaryButton { background: #285a75; color: white; border-color: #285a75; }
         #primaryButton:hover { background: #356f8d; }
         #dangerButton { color: #a33a35; }

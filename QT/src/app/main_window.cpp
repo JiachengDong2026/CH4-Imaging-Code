@@ -12,12 +12,18 @@
 #include <QAbstractSpinBox>
 #include <QDateTime>
 #include <QDoubleSpinBox>
+#include <QDir>
+#include <QFile>
+#include <QFileDialog>
+#include <QFileInfo>
 #include <QFormLayout>
 #include <QFrame>
 #include <QGridLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
+#include <QHash>
 #include <QLabel>
+#include <QLineEdit>
 #include <QLocale>
 #include <QMessageBox>
 #include <QPlainTextEdit>
@@ -32,11 +38,14 @@
 #include <QTabBar>
 #include <QTextCharFormat>
 #include <QTextDocument>
+#include <QTextStream>
 #include <QTimer>
 #include <QToolButton>
 #include <QVBoxLayout>
+#include <QVector>
 
 #include <cmath>
+#include <optional>
 
 namespace ch4::app {
 namespace {
@@ -122,6 +131,104 @@ QWidget* rangeEditor(QDoubleSpinBox* minimum, QDoubleSpinBox* maximum) {
     layout->addWidget(numericEditor(minimum), 1);
     layout->addWidget(numericEditor(maximum), 1);
     return row;
+}
+
+QWidget* comboEditor(QComboBox* combo) {
+    combo->setObjectName(QStringLiteral("comboWithoutArrow"));
+    combo->setMinimumHeight(34);
+    combo->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
+    auto* arrow = new QToolButton;
+    arrow->setObjectName(QStringLiteral("comboArrowButton"));
+    arrow->setArrowType(Qt::DownArrow);
+    arrow->setFixedSize(24, 34);
+    arrow->setToolTip(QStringLiteral("Show options"));
+    QObject::connect(arrow, &QToolButton::clicked, combo, &QComboBox::showPopup);
+
+    auto* editor = new QWidget;
+    auto* layout = new QHBoxLayout(editor);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(0);
+    layout->addWidget(combo, 1);
+    layout->addWidget(arrow);
+    return editor;
+}
+
+std::optional<model::FusedPoint> parseRecordedPoint(const QStringList& fields,
+                                                     const QHash<QString, int>& columns) {
+    const auto value = [&fields, &columns](const QString& name) { return fields.at(columns.value(name)); };
+    model::FusedPoint point;
+    bool ok = false;
+    point.measurementTime = value(QStringLiteral("measurement_ticks")).toULongLong(&ok); if (!ok) return {};
+    point.imageId = value(QStringLiteral("image_id")).toUInt(&ok); if (!ok) return {};
+    point.lineId = value(QStringLiteral("line_id")).toUShort(&ok); if (!ok) return {};
+    point.pointId = value(QStringLiteral("point_id")).toUShort(&ok); if (!ok) return {};
+    point.xAngleQ13 = value(QStringLiteral("x_q13")).toShort(&ok); if (!ok) return {};
+    point.yAngleQ13 = value(QStringLiteral("y_q13")).toShort(&ok); if (!ok) return {};
+    point.i1 = value(QStringLiteral("i1")).toInt(&ok); if (!ok) return {};
+    point.q1 = value(QStringLiteral("q1")).toInt(&ok); if (!ok) return {};
+    point.i2 = value(QStringLiteral("i2")).toInt(&ok); if (!ok) return {};
+    point.q2 = value(QStringLiteral("q2")).toInt(&ok); if (!ok) return {};
+    point.a1 = value(QStringLiteral("a1")).toUInt(&ok); if (!ok) return {};
+    point.a2 = value(QStringLiteral("a2")).toUInt(&ok); if (!ok) return {};
+    point.flags = value(QStringLiteral("flags")).toUShort(&ok, 16); if (!ok) return {};
+    point.configRevision = value(QStringLiteral("config_revision")).toUShort(&ok); if (!ok) return {};
+    return point;
+}
+
+struct RecordedCsvTable {
+    QHash<QString, int> columns;
+    QVector<QStringList> rows;
+};
+
+std::optional<RecordedCsvTable> readRecordedCsv(const QString& fileName,
+                                                 const QStringList& requiredColumns) {
+    QFile file(fileName);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+        return {};
+    QTextStream input(&file);
+    const QStringList header = input.readLine().split(',');
+    RecordedCsvTable table;
+    for (const QString& column : requiredColumns) {
+        const int index = header.indexOf(column);
+        if (index < 0)
+            return {};
+        table.columns.insert(column, index);
+    }
+    while (!input.atEnd()) {
+        const QString line = input.readLine();
+        if (line.trimmed().isEmpty())
+            continue;
+        const QStringList fields = line.split(',');
+        if (fields.size() >= header.size())
+            table.rows.append(fields);
+    }
+    return table;
+}
+
+std::optional<model::AngleSample> parseRecordedAngle(const QStringList& fields,
+                                                      const QHash<QString, int>& columns) {
+    const auto value = [&fields, &columns](const QString& name) { return fields.at(columns.value(name)); };
+    model::AngleSample sample;
+    bool ok = false;
+    sample.measurementTime = value(QStringLiteral("measurement_ticks")).toULongLong(&ok); if (!ok) return {};
+    sample.sampleIndex = value(QStringLiteral("sample_index")).toUInt(&ok); if (!ok) return {};
+    sample.xAngleQ13 = value(QStringLiteral("x_q13")).toShort(&ok); if (!ok) return {};
+    sample.yAngleQ13 = value(QStringLiteral("y_q13")).toShort(&ok); if (!ok) return {};
+    return sample;
+}
+
+std::optional<model::HarmonicCurve> parseRecordedHarmonic(const QStringList& fields,
+                                                           const QHash<QString, int>& columns) {
+    const auto value = [&fields, &columns](const QString& name) { return fields.at(columns.value(name)); };
+    model::HarmonicCurve curve;
+    bool ok = false;
+    curve.measurementTime = value(QStringLiteral("measurement_ticks")).toULongLong(&ok); if (!ok) return {};
+    curve.sampleIndex = value(QStringLiteral("sample_index")).toUInt(&ok); if (!ok) return {};
+    curve.i1 = value(QStringLiteral("i1")).toInt(&ok); if (!ok) return {};
+    curve.q1 = value(QStringLiteral("q1")).toInt(&ok); if (!ok) return {};
+    curve.i2 = value(QStringLiteral("i2")).toInt(&ok); if (!ok) return {};
+    curve.q2 = value(QStringLiteral("q2")).toInt(&ok); if (!ok) return {};
+    return curve;
 }
 
 class LogHighlighter final : public QSyntaxHighlighter {
@@ -256,6 +363,14 @@ MainWindow::MainWindow(QWidget* parent)
     auto* workspaceHeading = new QHBoxLayout;
     workspaceHeading->addWidget(sectionTitle(QStringLiteral("Live workspace")));
     workspaceHeading->addStretch();
+    auto* trajectoryDisplay = new QComboBox;
+    trajectoryDisplay->addItem(QStringLiteral("Trajectory"),
+                               static_cast<int>(visualization::TrajectoryWidget::DisplayMode::Trajectory));
+    trajectoryDisplay->addItem(QStringLiteral("Scatter"),
+                               static_cast<int>(visualization::TrajectoryWidget::DisplayMode::Scatter));
+    trajectoryDisplay->setFixedWidth(110);
+    workspaceHeading->addWidget(new QLabel(QStringLiteral("Display")));
+    workspaceHeading->addWidget(trajectoryDisplay);
     clearViewButton_ = new QPushButton(QStringLiteral("Clear trajectory"));
     clearViewButton_->setObjectName(QStringLiteral("secondaryButton"));
     workspaceHeading->addWidget(clearViewButton_);
@@ -346,6 +461,11 @@ MainWindow::MainWindow(QWidget* parent)
 
     connect(parameterTabs_, &QTabBar::currentChanged, parameterPages_, &QStackedWidget::setCurrentIndex);
     connect(viewTabs_, &QTabBar::currentChanged, viewPages_, &QStackedWidget::setCurrentIndex);
+    connect(trajectoryDisplay, qOverload<int>(&QComboBox::currentIndexChanged), this,
+            [this, trajectoryDisplay](int) {
+                trajectory_->setDisplayMode(static_cast<visualization::TrajectoryWidget::DisplayMode>(
+                    trajectoryDisplay->currentData().toInt()));
+            });
     connect(refreshButton, &QPushButton::clicked, this, &MainWindow::refreshPorts);
     connect(connectButton_, &QPushButton::clicked, this, &MainWindow::toggleConnection);
     connect(startButton_, &QPushButton::clicked, this, &MainWindow::startRun);
@@ -400,6 +520,7 @@ MainWindow::MainWindow(QWidget* parent)
     connect(session_, &device::DeviceSession::pointReceived, this, &MainWindow::onPoint);
     connect(session_, &device::DeviceSession::angleSampleReceived, this, [this](const model::AngleSample& sample) {
         trajectory_->append(sample.xDegrees(), sample.yDegrees());
+        recorder_->append(sample);
         xAngleValue_->setText(QStringLiteral("%1°").arg(sample.xDegrees(), 0, 'f', 3));
         yAngleValue_->setText(QStringLiteral("%1°").arg(sample.yDegrees(), 0, 'f', 3));
         dirty_ = true;
@@ -408,6 +529,7 @@ MainWindow::MainWindow(QWidget* parent)
         const double amplitude1f = curve.amplitude1f();
         const double amplitude2f = curve.amplitude2f();
         harmonic_->appendRaw(curve.sampleIndex, amplitude1f, amplitude2f);
+        recorder_->append(curve);
         oneFValue_->setText(QString::number(amplitude1f, 'f', 3));
         twoFValue_->setText(QString::number(amplitude2f, 'f', 3));
         ratioValue_->setText(QString::number(amplitude1f == 0.0 ? 0.0 : amplitude2f / amplitude1f, 'f', 4));
@@ -506,8 +628,8 @@ QWidget* MainWindow::mirrorPage() {
     form->addRow(QStringLiteral("Data streams"), streamAngles_);
     form->addRow(QString(), streamHarmonics_);
     form->addRow(QString(), caption(QStringLiteral("Trajectory is sent only after valid fast-mirror feedback is received.")));
-    form->addRow(QStringLiteral("Scheduling"), scanPolicy_);
-    form->addRow(QStringLiteral("On stop"), stopAction_);
+    form->addRow(QStringLiteral("Scheduling"), comboEditor(scanPolicy_));
+    form->addRow(QStringLiteral("On stop"), comboEditor(stopAction_));
     auto* applyButton = new QPushButton(QStringLiteral("Apply scan parameters"));
     applyButton->setObjectName(QStringLiteral("primaryButton"));
     form->addRow(QString(), applyButton);
@@ -546,6 +668,32 @@ QWidget* MainWindow::mirrorPage() {
     connect(zeroButton, &QPushButton::clicked, this, [this] { sendMirrorAction(0); });
     connect(originButton, &QPushButton::clicked, this, [this] { sendMirrorAction(1); });
     layout->addWidget(serviceBox);
+
+    auto* dataBox = new QGroupBox(QStringLiteral("Data recording"));
+    auto* dataForm = new QFormLayout(dataBox);
+    dataForm->setContentsMargins(8, 8, 8, 8);
+    saveData_ = new QCheckBox(QStringLiteral("Save acquisition data"));
+    saveData_->setChecked(true);
+    recordingDirectory_ = new QLineEdit(QDir(QStringLiteral(CH4_PROJECT_ROOT "/Data")).absolutePath());
+    recordingDirectory_->setReadOnly(true);
+    recordingDirectory_->setToolTip(QStringLiteral("New session folders are created here."));
+    auto* chooseDirectoryButton = new QPushButton(QStringLiteral("Browse…"));
+    chooseDirectoryButton->setObjectName(QStringLiteral("secondaryButton"));
+    auto* directoryEditor = new QWidget;
+    auto* directoryLayout = new QHBoxLayout(directoryEditor);
+    directoryLayout->setContentsMargins(0, 0, 0, 0);
+    directoryLayout->setSpacing(4);
+    directoryLayout->addWidget(recordingDirectory_, 1);
+    directoryLayout->addWidget(chooseDirectoryButton);
+    auto* loadDataButton = new QPushButton(QStringLiteral("Open recorded data"));
+    loadDataButton->setObjectName(QStringLiteral("secondaryButton"));
+    dataForm->addRow(QStringLiteral("Save data"), saveData_);
+    dataForm->addRow(QStringLiteral("Save location"), directoryEditor);
+    dataForm->addRow(QString(), caption(QStringLiteral("The setting takes effect when a new acquisition starts.")));
+    dataForm->addRow(QStringLiteral("Recorded data"), loadDataButton);
+    connect(chooseDirectoryButton, &QPushButton::clicked, this, &MainWindow::chooseRecordingDirectory);
+    connect(loadDataButton, &QPushButton::clicked, this, &MainWindow::loadRecordedData);
+    layout->addWidget(dataBox);
     layout->addStretch();
     return page;
 }
@@ -629,15 +777,21 @@ void MainWindow::startRun() {
     if (session_->running())
         return;
     pointCount_ = 0;
+    displayingRecordedData_ = false;
     trajectory_->clear();
     harmonic_->clear();
     image_->clear();
     session_->setStreamSelection(streamAngles_->isChecked(), streamHarmonics_->isChecked());
     const QString mode = modeBox_->currentIndex() == 0 ? QStringLiteral("mock") : QStringLiteral("uart");
-    if (!recorder_->start(mode))
-        appendLog(QStringLiteral("WARNING  Unable to create the session record."));
-    else
-        appendLog(QStringLiteral("INFO  Session data: %1").arg(recorder_->directory()));
+    if (saveData_->isChecked()) {
+        if (!recorder_->start(recordingDirectory_->text(), mode))
+            appendLog(QStringLiteral("WARNING  Unable to create the session record."));
+        else
+            appendLog(QStringLiteral("INFO  Session data: %1").arg(recorder_->directory()));
+    } else {
+        recorder_->stop();
+        appendLog(QStringLiteral("INFO  Acquisition data recording is disabled."));
+    }
     session_->start();
 }
 
@@ -675,10 +829,164 @@ void MainWindow::clearLog() {
     log_->clear();
 }
 
+void MainWindow::chooseRecordingDirectory() {
+    const QString directory = QFileDialog::getExistingDirectory(
+        this, QStringLiteral("Choose data save location"), recordingDirectory_->text());
+    if (!directory.isEmpty())
+        recordingDirectory_->setText(QDir::toNativeSeparators(directory));
+}
+
+void MainWindow::loadRecordedData() {
+    if (session_->running()) {
+        QMessageBox::information(this, QStringLiteral("Acquisition in progress"),
+                                 QStringLiteral("Stop acquisition before opening recorded data."));
+        return;
+    }
+
+    const QString fileName = QFileDialog::getOpenFileName(
+        this, QStringLiteral("Open a recorded session file"), recordingDirectory_->text(),
+        QStringLiteral("Recorded session files (session.json fused_points.csv angles.csv harmonics.csv);;All files (*)"));
+    if (fileName.isEmpty())
+        return;
+
+    const QDir sessionDirectory(QFileInfo(fileName).absolutePath());
+    const QString fusedPath = sessionDirectory.filePath(QStringLiteral("fused_points.csv"));
+    const QString anglesPath = sessionDirectory.filePath(QStringLiteral("angles.csv"));
+    const QString harmonicsPath = sessionDirectory.filePath(QStringLiteral("harmonics.csv"));
+    if (!QFileInfo::exists(fusedPath) && !QFileInfo::exists(anglesPath) && !QFileInfo::exists(harmonicsPath)) {
+        QMessageBox::warning(this, QStringLiteral("Unsupported data folder"),
+                             QStringLiteral("Select a file from a recorded session folder."));
+        return;
+    }
+
+    const QStringList fusedColumns = {
+        QStringLiteral("measurement_ticks"), QStringLiteral("image_id"), QStringLiteral("line_id"),
+        QStringLiteral("point_id"), QStringLiteral("x_q13"), QStringLiteral("y_q13"),
+        QStringLiteral("i1"), QStringLiteral("q1"), QStringLiteral("i2"), QStringLiteral("q2"),
+        QStringLiteral("a1"), QStringLiteral("a2"), QStringLiteral("flags"), QStringLiteral("config_revision")};
+    QVector<model::FusedPoint> points;
+    qsizetype invalidRows = 0;
+    if (QFileInfo::exists(fusedPath)) {
+        const auto table = readRecordedCsv(fusedPath, fusedColumns);
+        if (!table) {
+            QMessageBox::warning(this, QStringLiteral("Unsupported data file"),
+                                 QStringLiteral("fused_points.csv does not match the supported recording format."));
+            return;
+        }
+        for (const QStringList& fields : table->rows) {
+            const auto point = parseRecordedPoint(fields, table->columns);
+            if (point) points.append(*point); else ++invalidRows;
+        }
+    }
+
+    const QStringList angleColumns = {QStringLiteral("measurement_ticks"), QStringLiteral("sample_index"),
+                                      QStringLiteral("x_q13"), QStringLiteral("y_q13")};
+    QVector<model::AngleSample> angles;
+    if (points.isEmpty() && QFileInfo::exists(anglesPath)) {
+        const auto table = readRecordedCsv(anglesPath, angleColumns);
+        if (!table) {
+            QMessageBox::warning(this, QStringLiteral("Unsupported data file"),
+                                 QStringLiteral("angles.csv does not match the supported recording format."));
+            return;
+        }
+        for (const QStringList& fields : table->rows) {
+            const auto sample = parseRecordedAngle(fields, table->columns);
+            if (sample) angles.append(*sample); else ++invalidRows;
+        }
+    }
+
+    const QStringList harmonicColumns = {QStringLiteral("measurement_ticks"), QStringLiteral("sample_index"),
+                                         QStringLiteral("i1"), QStringLiteral("q1"), QStringLiteral("i2"), QStringLiteral("q2")};
+    QVector<model::HarmonicCurve> harmonics;
+    if (points.isEmpty() && QFileInfo::exists(harmonicsPath)) {
+        const auto table = readRecordedCsv(harmonicsPath, harmonicColumns);
+        if (!table) {
+            QMessageBox::warning(this, QStringLiteral("Unsupported data file"),
+                                 QStringLiteral("harmonics.csv does not match the supported recording format."));
+            return;
+        }
+        for (const QStringList& fields : table->rows) {
+            const auto curve = parseRecordedHarmonic(fields, table->columns);
+            if (curve) harmonics.append(*curve); else ++invalidRows;
+        }
+    }
+    if (points.isEmpty() && angles.isEmpty() && harmonics.isEmpty()) {
+        QMessageBox::warning(this, QStringLiteral("No usable data"),
+                             QStringLiteral("The selected session does not contain any valid data rows."));
+        return;
+    }
+
+    trajectory_->clear();
+    harmonic_->clear();
+    image_->clear();
+    int displayTab = 0;
+    if (!points.isEmpty()) {
+        double xMinimum = points.first().xDegrees(), xMaximum = xMinimum;
+        double yMinimum = points.first().yDegrees(), yMaximum = yMinimum;
+        quint16 maximumPoint = 0, maximumLine = 0;
+        for (const model::FusedPoint& point : points) {
+            xMinimum = qMin(xMinimum, point.xDegrees()); xMaximum = qMax(xMaximum, point.xDegrees());
+            yMinimum = qMin(yMinimum, point.yDegrees()); yMaximum = qMax(yMaximum, point.yDegrees());
+            maximumPoint = qMax(maximumPoint, point.pointId); maximumLine = qMax(maximumLine, point.lineId);
+        }
+        if (qFuzzyCompare(xMinimum, xMaximum)) { xMinimum -= 0.5; xMaximum += 0.5; }
+        if (qFuzzyCompare(yMinimum, yMaximum)) { yMinimum -= 0.5; yMaximum += 0.5; }
+        trajectory_->configureRange(xMinimum, xMaximum, yMinimum, yMaximum);
+        image_->configure(qMax(2, int(maximumPoint) + 1), qMax(2, int(maximumLine) + 1), xMinimum, xMaximum, yMinimum, yMaximum);
+        for (const model::FusedPoint& point : points) {
+            trajectory_->append(point.xDegrees(), point.yDegrees());
+            harmonic_->append(point.amplitude1f(), point.amplitude2f(), point.ratio());
+            image_->add(point);
+        }
+        const model::FusedPoint& last = points.last();
+        xAngleValue_->setText(QStringLiteral("%1°").arg(last.xDegrees(), 0, 'f', 3));
+        yAngleValue_->setText(QStringLiteral("%1°").arg(last.yDegrees(), 0, 'f', 3));
+        oneFValue_->setText(QString::number(last.amplitude1f(), 'f', 3));
+        twoFValue_->setText(QString::number(last.amplitude2f(), 'f', 3));
+        ratioValue_->setText(QString::number(last.ratio(), 'f', 4));
+        displayTab = 2;
+    } else {
+        if (!angles.isEmpty()) {
+            double xMinimum = angles.first().xDegrees(), xMaximum = xMinimum;
+            double yMinimum = angles.first().yDegrees(), yMaximum = yMinimum;
+            for (const model::AngleSample& sample : angles) {
+                xMinimum = qMin(xMinimum, sample.xDegrees()); xMaximum = qMax(xMaximum, sample.xDegrees());
+                yMinimum = qMin(yMinimum, sample.yDegrees()); yMaximum = qMax(yMaximum, sample.yDegrees());
+            }
+            if (qFuzzyCompare(xMinimum, xMaximum)) { xMinimum -= 0.5; xMaximum += 0.5; }
+            if (qFuzzyCompare(yMinimum, yMaximum)) { yMinimum -= 0.5; yMaximum += 0.5; }
+            trajectory_->configureRange(xMinimum, xMaximum, yMinimum, yMaximum);
+            for (const model::AngleSample& sample : angles) trajectory_->append(sample.xDegrees(), sample.yDegrees());
+            const model::AngleSample& last = angles.last();
+            xAngleValue_->setText(QStringLiteral("%1°").arg(last.xDegrees(), 0, 'f', 3));
+            yAngleValue_->setText(QStringLiteral("%1°").arg(last.yDegrees(), 0, 'f', 3));
+        }
+        if (!harmonics.isEmpty()) {
+            for (const model::HarmonicCurve& curve : harmonics)
+                harmonic_->append(curve.amplitude1f(), curve.amplitude2f(), curve.amplitude1f() == 0.0 ? 0.0 : curve.amplitude2f() / curve.amplitude1f());
+            const model::HarmonicCurve& last = harmonics.last();
+            oneFValue_->setText(QString::number(last.amplitude1f(), 'f', 3));
+            twoFValue_->setText(QString::number(last.amplitude2f(), 'f', 3));
+            ratioValue_->setText(QString::number(last.amplitude1f() == 0.0 ? 0.0 : last.amplitude2f() / last.amplitude1f(), 'f', 4));
+            if (angles.isEmpty()) displayTab = 1;
+        }
+    }
+    pointCount_ = points.size();
+    displayingRecordedData_ = true;
+    dirty_ = true;
+    viewTabs_->setCurrentIndex(displayTab);
+    appendLog(QStringLiteral("INFO  Loaded recorded data from %1%2.")
+                  .arg(QDir::toNativeSeparators(sessionDirectory.absolutePath()))
+                  .arg(invalidRows ? QStringLiteral(" (%1 invalid rows skipped)").arg(invalidRows) : QString()));
+    statusBar()->showMessage(QStringLiteral("Recorded data loaded: %1 fused points, %2 angle samples, %3 harmonic samples.")
+                                 .arg(points.size()).arg(angles.size()).arg(harmonics.size()));
+}
+
 void MainWindow::onPoint(const model::FusedPoint& point) {
     if (!streamAngles_->isChecked() || !streamHarmonics_->isChecked())
         return;
     mirrorFeedbackActive_ = (point.flags & 0x0010u) != 0;
+    displayingRecordedData_ = false;
     ++pointCount_;
     image_->add(point);
     recorder_->append(point);
@@ -702,9 +1010,10 @@ void MainWindow::refreshPlots() {
     trajectory_->update();
     harmonic_->update();
     image_->update();
-    validCellsValue_->setText(streamAngles_->isChecked() && streamHarmonics_->isChecked()
+    const bool showImageStatistics = displayingRecordedData_ || (streamAngles_->isChecked() && streamHarmonics_->isChecked());
+    validCellsValue_->setText(showImageStatistics
                                   ? QLocale().toString(image_->validCells()) : QStringLiteral("—"));
-    imagePointsValue_->setText(streamAngles_->isChecked() && streamHarmonics_->isChecked()
+    imagePointsValue_->setText(showImageStatistics
                                    ? QLocale().toString(pointCount_) : QStringLiteral("—"));
     dirty_ = false;
 }

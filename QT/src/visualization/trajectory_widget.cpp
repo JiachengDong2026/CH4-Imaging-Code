@@ -58,6 +58,12 @@ void TrajectoryWidget::configureRange(double xMinimum, double xMaximum, double y
     clear();
 }
 
+void TrajectoryWidget::setDisplayMode(DisplayMode mode) {
+    if (displayMode_ == mode) return;
+    displayMode_ = mode;
+    update();
+}
+
 void TrajectoryWidget::paintEvent(QPaintEvent*) {
     QPainter p(this); p.setRenderHint(QPainter::Antialiasing); p.fillRect(rect(), Qt::white);
     const double spanX = (xMaximum_ - xMinimum_) / zoom_;
@@ -75,7 +81,16 @@ void TrajectoryWidget::paintEvent(QPaintEvent*) {
     for (int i = 1; i < 8; ++i) { const double f = i / 8.0;
         p.drawLine(QPointF(plot.left() + f * plot.width(), plot.top()), QPointF(plot.left() + f * plot.width(), plot.bottom()));
         p.drawLine(QPointF(plot.left(), plot.top() + f * plot.height()), QPointF(plot.right(), plot.top() + f * plot.height())); }
-    if (points_.size() > 1) { QPainterPath path(map(points_.first())); for (int i = 1; i < points_.size(); ++i) path.lineTo(map(points_[i])); p.setPen(QPen(QColor("#1976d2"), 1.4)); p.drawPath(path); }
+    if (displayMode_ == DisplayMode::Trajectory && points_.size() > 1) {
+        QPainterPath path(map(points_.first()));
+        for (int i = 1; i < points_.size(); ++i) path.lineTo(map(points_[i]));
+        p.setPen(QPen(QColor("#1976d2"), 1.4));
+        p.drawPath(path);
+    } else if (displayMode_ == DisplayMode::Scatter) {
+        p.setPen(Qt::NoPen);
+        p.setBrush(QColor("#1976d2"));
+        for (const QPointF& point : points_) p.drawEllipse(map(point), 1.7, 1.7);
+    }
     p.restore(); p.setPen(QColor("#667085")); p.drawRect(plot);
     for (int i = 0; i <= 8; ++i) { const double f = i / 8.0; const double x = left + f * spanX; const double y = top - f * spanY;
         const double px = plot.left() + f * plot.width(), py = plot.top() + f * plot.height();

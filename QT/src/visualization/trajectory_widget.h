@@ -10,10 +10,13 @@ class QWheelEvent;
 namespace ch4::visualization {
 class TrajectoryWidget final : public QWidget {
 public:
+    enum class DisplayMode { Trajectory, Scatter };
+
     explicit TrajectoryWidget(QWidget* parent = nullptr);
     void append(double x, double y);
     void clear();
     void configureRange(double xMinimum, double xMaximum, double yMinimum, double yMaximum);
+    void setDisplayMode(DisplayMode mode);
 protected:
     void paintEvent(QPaintEvent*) override;
     void mousePressEvent(QMouseEvent*) override;
@@ -28,6 +31,7 @@ private:
     double yMinimum_ = -1.1;
     double yMaximum_ = 1.1;
     double zoom_ = 1.0;
+    DisplayMode displayMode_ = DisplayMode::Trajectory;
     QPointF center_{0.0, 0.0};
     QPoint lastMouse_;
     QPoint cursor_;

@@ -8,6 +8,7 @@ class QComboBox;
 class QCheckBox;
 class QDoubleSpinBox;
 class QLabel;
+class QLineEdit;
 class QPlainTextEdit;
 class QPushButton;
 class QSpinBox;
@@ -49,6 +50,8 @@ private:
     void clearHarmonics();
     void clearImage();
     void clearLog();
+    void chooseRecordingDirectory();
+    void loadRecordedData();
     void onPoint(const model::FusedPoint& point);
     void appendLog(const QString& text);
     void refreshPlots();
@@ -85,6 +88,8 @@ private:
     QLabel* validCellsValue_ = nullptr;
     QLabel* imagePointsValue_ = nullptr;
     QPlainTextEdit* log_ = nullptr;
+    QCheckBox* saveData_ = nullptr;
+    QLineEdit* recordingDirectory_ = nullptr;
     visualization::TrajectoryWidget* trajectory_ = nullptr;
     visualization::HarmonicWidget* harmonic_ = nullptr;
     visualization::MethaneImageWidget* image_ = nullptr;
@@ -107,6 +112,7 @@ private:
     QTimer* refreshTimer_ = nullptr;
     quint64 pointCount_ = 0;
     bool mirrorFeedbackActive_ = false;
+    bool displayingRecordedData_ = false;
     bool dirty_ = false;
 };
 
