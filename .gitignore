@@ -3,6 +3,7 @@
 /.vscode/*.log
 /Data/*
 !/Data/README.md
+/tmp/
 
 # Qt / CMake
 /QT/build/
@@ -35,6 +36,14 @@
 *.bin
 *.ltx
 
+# Generated output products for the checked-in USB3 baseline IP configs
+/FPGA/vendor/ch569_loopback_baseline/clk_wiz_0/*
+!/FPGA/vendor/ch569_loopback_baseline/clk_wiz_0/clk_wiz_0.xci
+/FPGA/vendor/ch569_loopback_baseline/fifo_generator_0/*
+!/FPGA/vendor/ch569_loopback_baseline/fifo_generator_0/fifo_generator_0.xci
+/FPGA/vendor/ch569_loopback_baseline/clk_wiz_0.xci
+/FPGA/vendor/ch569_loopback_baseline/fifo_generator_0.xci
+
 # Python/editor
 __pycache__/
 *.py[cod]
@@ -42,4 +51,3 @@ __pycache__/
 .idea/
 *.user
 *.swp
-
