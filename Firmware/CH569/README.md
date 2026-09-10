@@ -76,3 +76,22 @@ This fixed-block firmware is only the electrical/link validation target. The
 next checkpoint will replace its blocking loop with ping-pong buffers and pass
 the existing CH4 application byte stream without changing the application
 frame format.
+
+## Stage 2 unidirectional stream firmware
+
+The first stage-2 firmware is kept separately in `usb3_stream/Main.c`. It no
+longer waits for USB EP2 data. Instead, it receives one 4096-byte FPGA HSPI
+packet, checks the CH569 hardware CRC/sequence status, and publishes a valid
+packet through USB EP1. Failed HSPI packets are discarded rather than exposed
+to the host.
+
+Build output:
+
+```text
+Firmware/CH569/CH569_USB3_Stream.hex
+SHA-256: D23AB869250F8C3F1ECEA4A5CA40B7AF134BF88D2E45D75A06DEBB51F6CE876F
+```
+
+This image is not compatible with the loopback FPGA image because that image
+requires a completed FPGA receive transaction before it transmits. Program it
+only together with the forthcoming FPGA stream-test bitstream.

@@ -21,6 +21,8 @@
 *.a
 *.o
 *.obj
+*.elf
+*.map
 *.pdb
 
 # Vivado / FPGA simulation

@@ -24,6 +24,16 @@
 
 统一应用协议将在下一检查点接到FIFO的系统时钟侧，帧格式不变。
 
+`usb_hspi_block_packer.v` 是该检查点的第一层适配器。它接收现有
+`app_frame_serializer` 的字节流，将一帧按小端顺序装入一个4096字节块，并以零
+填充块尾。应用帧最大为4093字节，因此不会跨越HSPI块边界。该模块只定义系统侧
+ready/valid接口，尚未替换或修改硬件黄金基线的HSPI RX/TX模块。
+
+`usb_fused_point_block_source.v` 将现有48字节融合点载荷交给统一协议串行器，生成
+`FUSED_POINT (0x62)` 帧，再通过上述封装器形成4096字节块。它带有独立的16位应用
+帧序号；当前只完成RTL和协议级仿真，还需要新的CH569流式固件主动接收FPGA数据并
+送入USB EP1，不能直接配合仅由EP2写入触发的回环固件上板。
+
 硬件黄金基线由`FPGA/vendor/ch569_loopback_baseline`中的厂家RX/TX、CRC、
 控制器和FIFO/时钟IP配置构建，顶层包含已经通过实物验收的30 MHz、
 `HTREQ && !HRACT`总线方向保护及RX完成后再启动TX的修复。独立构建脚本

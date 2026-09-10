@@ -1,3 +1,4 @@
+`timescale 1ns / 1ps
 `include "protocol_defs.vh"
 module app_frame_serializer #(parameter integer PAYLOAD_BYTES=48)(input wire clk,rst,start,input wire[7:0]dst,src,msg_type,flags,
  input wire[15:0]sequence,input wire[PAYLOAD_BYTES*8-1:0]payload,input wire byte_ready,

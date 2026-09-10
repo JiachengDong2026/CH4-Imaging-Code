@@ -58,6 +58,7 @@ internal static class Usb3LoopbackTest
         bool useEndpointApi = false;
         bool writeOnly = false;
         bool readOnly = false;
+        bool streamMode = false;
 
         for (int argIndex = 0; argIndex < args.Length; argIndex++)
         {
@@ -91,6 +92,13 @@ internal static class Usb3LoopbackTest
             {
                 readOnly = true;
             }
+            else if (arg == "--stream")
+            {
+                streamMode = true;
+                readOnly = true;
+                useEndpointApi = true;
+                transferSize = DefaultTransferSize;
+            }
             else
             {
                 return Usage("无法识别参数：" + arg);
@@ -100,8 +108,12 @@ internal static class Usb3LoopbackTest
         if (writeOnly && readOnly)
             return Usage("--write-only 和 --read-only 不能同时使用。");
 
-        Console.WriteLine("ACX750-CH569 USB3.0 最小回环测试");
-        string route = readOnly
+        Console.WriteLine(streamMode
+            ? "ACX750-CH569 USB3.0 融合点流式接收测试"
+            : "ACX750-CH569 USB3.0 最小回环测试");
+        string route = streamMode
+            ? "USB EP 0x81 IN（FUSED_POINT流）"
+            : readOnly
             ? "USB EP 0x81 IN（只读上一笔诊断）"
             : writeOnly
                 ? "USB EP 0x02 OUT（只写诊断）"
@@ -230,6 +242,16 @@ internal static class Usb3LoopbackTest
                     return 13;
                 }
 
+                if (streamMode)
+                {
+                    if (!ValidateFusedPointStreamBlock(rx, -1))
+                        return 16;
+                    totalBytes += transferSize;
+                    Console.WriteLine("[{0}/{1}] USB3_STREAM_BLOCK_PASS，数据块索引 {2}。",
+                        iteration + 1, iterations, iteration);
+                    continue;
+                }
+
                 bool hasDiagnosticFooter = PrintHspiDiagnosticFooter(rx);
                 int compareLength = hasDiagnosticFooter ? DefaultTransferSize - 16 : transferSize;
 
@@ -272,6 +294,9 @@ internal static class Usb3LoopbackTest
             double mibPerSecond = totalBytes / 1048576.0 / totalTimer.Elapsed.TotalSeconds;
             if (writeOnly)
                 Console.WriteLine("只写诊断完成；再次执行回环前请短按 USB_RST。平均写入吞吐 {0:F2} MiB/s", mibPerSecond);
+            else if (streamMode)
+                Console.WriteLine("USB3_FUSED_POINT_STREAM_PASS：{0} 个数据块全部通过，平均读取吞吐 {1:F2} MiB/s",
+                    iterations, mibPerSecond);
             else if (readOnly)
                 Console.WriteLine("USB_EP1_READ_PASS：{0} 次只读校验全部通过，平均读取吞吐 {1:F2} MiB/s",
                     iterations, mibPerSecond);
@@ -286,6 +311,66 @@ internal static class Usb3LoopbackTest
         {
             CH375CloseDevice(DeviceIndex);
         }
+    }
+
+    private static bool ValidateFusedPointStreamBlock(byte[] data, int expectedSequence)
+    {
+        const int payloadLength = 48;
+        const int frameLength = 13 + payloadLength;
+        if (data.Length != DefaultTransferSize ||
+            data[0] != 0xA5 || data[1] != 0x5A || data[2] != 0x01 ||
+            data[3] != 0x00 || data[4] != 0x01 || data[5] != 0x62 ||
+            data[6] != 0x40 || data[9] != payloadLength || data[10] != 0x00)
+        {
+            Console.Error.WriteLine("USB3_STREAM_FAIL：统一应用帧头或FUSED_POINT类型错误。");
+            Console.Error.Write("首部16字节：");
+            for (int i = 0; i < 16; i++)
+                Console.Error.Write("{0:X2}{1}", data[i], i == 15 ? Environment.NewLine : " ");
+            return false;
+        }
+
+        int sequence = data[7] | (data[8] << 8);
+        if (expectedSequence >= 0 && sequence != (expectedSequence & 0xFFFF))
+        {
+            Console.Error.WriteLine("USB3_STREAM_FAIL：期望应用序号 {0}，收到 {1}。",
+                expectedSequence & 0xFFFF, sequence);
+            return false;
+        }
+
+        ushort crc = 0xFFFF;
+        for (int i = 2; i < 11 + payloadLength; i++)
+            crc = Crc16CcittFalse(crc, data[i]);
+        int receivedCrc = data[11 + payloadLength] | (data[12 + payloadLength] << 8);
+        if (receivedCrc != crc)
+        {
+            Console.Error.WriteLine("USB3_STREAM_FAIL：CRC16期望0x{0:X4}，收到0x{1:X4}。",
+                crc, receivedCrc);
+            return false;
+        }
+
+        for (int i = frameLength; i < data.Length; i++)
+        {
+            if (data[i] != 0)
+            {
+                Console.Error.WriteLine("USB3_STREAM_FAIL：补零区偏移0x{0:X4}为0x{1:X2}。",
+                    i, data[i]);
+                return false;
+            }
+        }
+
+        uint imageId = BitConverter.ToUInt32(data, 19);
+        ushort pointId = BitConverter.ToUInt16(data, 25);
+        Console.WriteLine("FUSED_POINT sequence={0} image_id=0x{1:X8} point_id={2} crc16=0x{3:X4}",
+            sequence, imageId, pointId, crc);
+        return true;
+    }
+
+    private static ushort Crc16CcittFalse(ushort crc, byte data)
+    {
+        crc ^= (ushort)(data << 8);
+        for (int bit = 0; bit < 8; bit++)
+            crc = (ushort)(((crc & 0x8000) != 0) ? ((crc << 1) ^ 0x1021) : (crc << 1));
+        return crc;
     }
 
     private static bool PrintHspiDiagnosticFooter(byte[] data)
@@ -321,7 +406,7 @@ internal static class Usb3LoopbackTest
         Console.Error.WriteLine(error);
         Console.Error.WriteLine(
             "用法: Usb3LoopbackTest.exe [循环次数] [--api standard|endpoint] " +
-            "[--size 1024|4096] [--write-only|--read-only]");
+            "[--size 1024|4096] [--write-only|--read-only|--stream]");
         return 2;
     }
 
