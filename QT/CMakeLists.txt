@@ -28,6 +28,7 @@ qt_add_executable(CH4ImagingHost WIN32
     src/model/harmonic_curve.cpp src/model/harmonic_curve.h
     src/device/device_session.cpp src/device/device_session.h
     src/device/native_serial.cpp src/device/native_serial.h
+    src/device/native_usb_stream.cpp src/device/native_usb_stream.h
     src/processing/image_accumulator.cpp src/processing/image_accumulator.h
     src/storage/session_recorder.cpp src/storage/session_recorder.h
     src/visualization/trajectory_widget.cpp src/visualization/trajectory_widget.h
@@ -73,6 +74,7 @@ if(BUILD_TESTING)
         src/model/harmonic_curve.cpp src/model/harmonic_curve.h
         src/device/device_session.cpp src/device/device_session.h
         src/device/native_serial.cpp src/device/native_serial.h
+        src/device/native_usb_stream.cpp src/device/native_usb_stream.h
         src/processing/image_accumulator.cpp src/processing/image_accumulator.h
     )
     target_link_libraries(stage1_tests PRIVATE ch4_protocol Qt6::Test)

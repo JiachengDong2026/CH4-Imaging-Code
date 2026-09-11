@@ -72,10 +72,12 @@ private:
     QComboBox* portBox_ = nullptr;
     QComboBox* baudBox_ = nullptr;
     QPushButton* connectButton_ = nullptr;
+    QPushButton* usbConnectButton_ = nullptr;
     QPushButton* startButton_ = nullptr;
     QPushButton* stopButton_ = nullptr;
     QPushButton* clearViewButton_ = nullptr;
     QLabel* connectionLabel_ = nullptr;
+    QLabel* usbConnectionLabel_ = nullptr;
     QLabel* acquisitionLabel_ = nullptr;
     QLabel* framesValue_ = nullptr;
     QLabel* crcErrorsValue_ = nullptr;
@@ -110,8 +112,11 @@ private:
     QDoubleSpinBox* staticX_ = nullptr;
     QDoubleSpinBox* staticY_ = nullptr;
     QTimer* refreshTimer_ = nullptr;
+    QTimer* mirrorDetectionTimer_ = nullptr;
     quint64 pointCount_ = 0;
     bool mirrorFeedbackActive_ = false;
+    bool uartConnected_ = false;
+    bool usbConnected_ = false;
     bool displayingRecordedData_ = false;
     bool dirty_ = false;
 };

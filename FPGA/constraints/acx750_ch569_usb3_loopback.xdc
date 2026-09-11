@@ -61,3 +61,7 @@ if {[llength $hspi_tx_source] != 0 && [llength $hspi_tx_sink] != 0} {
 set_clock_groups -asynchronous -group [get_clocks hspi_rx_clk] -group [get_clocks -include_generated_clocks sys_clk]
 set_property SLEW FAST [get_ports {HD[*] HTACK HTCLK HTREQ HTVLD}]
 set_property DRIVE 16 [get_ports {HD[*] HTACK HTCLK HTREQ HTVLD}]
+set_property PACKAGE_PIN L21 [get_ports uart_rxd]
+set_property IOSTANDARD LVCMOS33 [get_ports uart_rxd]
+set_property PACKAGE_PIN M21 [get_ports uart_txd]
+set_property IOSTANDARD LVCMOS33 [get_ports uart_txd]

@@ -141,16 +141,16 @@ module ch4_imaging_top #(parameter integer CLOCK_HZ=50_000_000,UART_BAUD=921600)
   .x_min_q13(x_min),.x_max_q13(x_max),.y_min_q13(y_min),.y_max_q13(y_max),.image_lines(image_lines),.stream_rate_hz(stream_rate_hz),.mirror_x_freq_mhz(mirror_x_freq_mhz),.mirror_frame_freq_mhz(mirror_frame_freq_mhz),.mirror_feedback_hz(mirror_feedback_hz),.scan_policy(scan_policy),.stop_action(stop_action),.static_x_q13(static_x),.static_y_q13(static_y));
  app_frame_serializer #(.PAYLOAD_BYTES(17))respser(.clk(sys_clk),.rst(rst),.start(resp_start),.dst(8'h00),.src(8'h01),
   .msg_type(response_type),.flags(`CH4_FLAG_IS_RESPONSE),.sequence(response_seq),.payload(response_payload),
-  .byte_ready(!uart_busy&&!resp_bytev),.byte_valid(resp_bytev),.byte_data(resp_byte),.busy(resp_busy),.done(resp_done));
+  .byte_ready(!uart_busy),.byte_valid(resp_bytev),.byte_data(resp_byte),.busy(resp_busy),.done(resp_done));
  app_frame_serializer #(.PAYLOAD_BYTES(16))angleser(.clk(sys_clk),.rst(rst),.start(angle_start),.dst(8'h00),.src(8'h01),
   .msg_type(`CH4_MSG_ANGLE_SAMPLE),.flags(`CH4_FLAG_DATA_VALID),.sequence(angle_seq),.payload(angle_payload),
-  .byte_ready(!uart_busy&&!resp_bytev&&!angle_bytev&&!harmonic_bytev&&!measure_bytev),.byte_valid(angle_bytev),.byte_data(angle_byte),.busy(angle_busy),.done(angle_done));
+  .byte_ready(!uart_busy),.byte_valid(angle_bytev),.byte_data(angle_byte),.busy(angle_busy),.done(angle_done));
  app_frame_serializer #(.PAYLOAD_BYTES(48))dataser(.clk(sys_clk),.rst(rst),.start(measure_start),.dst(8'h00),.src(8'h01),
   .msg_type(`CH4_MSG_FUSED_POINT),.flags(`CH4_FLAG_DATA_VALID),.sequence(measure_seq),.payload(measure_payload),
-  .byte_ready(!uart_busy&&!resp_bytev&&!angle_bytev&&!harmonic_bytev&&!measure_bytev),.byte_valid(measure_bytev),.byte_data(measure_byte),.busy(measure_busy),.done(measure_done));
+  .byte_ready(!uart_busy),.byte_valid(measure_bytev),.byte_data(measure_byte),.busy(measure_busy),.done(measure_done));
  app_frame_serializer #(.PAYLOAD_BYTES(28))harmonicser(.clk(sys_clk),.rst(rst),.start(harmonic_start),.dst(8'h00),.src(8'h01),
   .msg_type(`CH4_MSG_HARMONIC_CURVE),.flags(`CH4_FLAG_DATA_VALID),.sequence(harmonic_seq),.payload(harmonic_payload),
-  .byte_ready(!uart_busy&&!resp_bytev&&!angle_bytev&&!harmonic_bytev&&!measure_bytev),.byte_valid(harmonic_bytev),.byte_data(harmonic_byte),.busy(harmonic_busy),.done(harmonic_done));
+  .byte_ready(!uart_busy),.byte_valid(harmonic_bytev),.byte_data(harmonic_byte),.busy(harmonic_busy),.done(harmonic_done));
  uart_tx #(.CLK_HZ(CLOCK_HZ),.BAUD(UART_BAUD))ut(.clk(sys_clk),.rst(rst),.start(resp_bytev|angle_bytev|harmonic_bytev|measure_bytev),
   .data(resp_bytev?resp_byte:(angle_bytev?angle_byte:(harmonic_bytev?harmonic_byte:measure_byte))),.tx(uart_txd),.busy(uart_busy),.done(uart_done));
 endmodule

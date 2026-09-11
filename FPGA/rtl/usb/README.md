@@ -63,3 +63,15 @@ C19 和 HSPI，而不是重复安装上位机端点测试程序。
 当前 `ch2` 回环还需要三根控制跳线：FPGA C19 -> U29-5（PA12），FPGA
 E19 -> U29-6（PA14），FPGA D19 -> U29-8（PA15）。教程中仅有的
 `GPIO1 -> U29-8` 说明对应速度测试例程，不是本回环例程的完整接线。
+
+`usb_fused_point_stream_bridge.v` 是真实融合结果接入USB路径的弹性边界。它使用
+384位双时钟FIFO把50 MHz成像域跨到120 MHz USB打包域，向上下游提供
+`valid/ready`接口，并分别统计接受、启动发送和因FIFO满而丢弃的帧数。黄金流式
+测试顶层保持不变，后续系统顶层通过该模块连接成像流水线的
+`emit_point/fused_payload`与`usb_fused_point_block_source`。
+
+真实数据硬件验收顶层为`ch4_usb3_imaging_stream_top.v`。它复用HITRAN ROM、
+25.6 MSPS采样调度、DILA、扫描成帧与WMS特征提取链路，每个真实融合结果通过
+双时钟FIFO进入USB域；CH569每次拉高`Tx_Ctrl`时只发送一个4096字节块。构建与
+下载脚本分别为`build_usb3_imaging_stream.tcl`和
+`program_usb3_imaging_stream.tcl`，不会覆盖黄金流式测试bitstream。

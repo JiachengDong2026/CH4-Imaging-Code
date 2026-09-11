@@ -1,5 +1,6 @@
 #pragma once
 #include "protocol/frame_codec.h"
+#include <QMetaType>
 
 #include <cmath>
 #include <optional>
@@ -17,3 +18,4 @@ struct HarmonicCurve {
 };
 std::optional<HarmonicCurve> parseHarmonicCurve(QByteArrayView payload);
 }
+Q_DECLARE_METATYPE(ch4::model::HarmonicCurve)

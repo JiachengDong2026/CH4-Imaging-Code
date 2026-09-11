@@ -13,7 +13,20 @@ int main(int argc, char* argv[]) {
         QWidget { background: #f3f4f6; color: #263238; font-family: "Microsoft YaHei UI"; font-size: 12px; }
         #appHeader, #sidePanel, #workspacePanel, #diagnosticsPanel { background: #ffffff; border: 1px solid #cfd5da; border-radius: 2px; }
         #appTitle { font-size: 18px; font-weight: 700; color: #263238; }
-        #headerFieldLabel { background: transparent; color: #37474f; }
+        #headerFieldLabel { background: transparent; color: #475467; font-size: 11px; }
+        QFrame#controlLinkModule, QFrame#dataLinkModule, QFrame#acquisitionModule { background: #f8fafb; border: 1px solid #e1e6ea; border-radius: 5px; }
+        QFrame#dataLinkModule { background: #f7f9fa; }
+        QFrame#acquisitionModule { background: #f8faf9; }
+        #moduleTitle { background: transparent; color: #344054; font-size: 11px; font-weight: 600; }
+        #interfaceName { background: transparent; color: #344054; font-weight: 600; }
+        QLabel[headerControl="true"] { border: 1px solid transparent; border-radius: 5px; padding: 0px 8px; font-size: 11px; }
+        QPushButton[headerControl="true"], QComboBox[headerControl="true"] { padding: 4px 6px; font-size: 11px; }
+        QLabel[status="disconnected"] { color: #667085; background: #f0f2f4; border-color: #e1e5e8; }
+        QLabel[status="idle"] { color: #526c7a; background: #edf3f5; border-color: #dce7eb; }
+        QLabel[status="connected"] { color: #087443; background: #edf7f2; border-color: #d4ebdf; font-weight: 600; }
+        QLabel[status="acquiring"] { color: #08786f; background: #eaf7f4; border-color: #cfeae4; font-weight: 600; }
+        QLabel[status="warning"] { color: #9a6700; background: #fff7e5; border-color: #f4dfad; font-weight: 600; }
+        QLabel[status="error"] { color: #b42318; background: #fff0ef; border-color: #f1d0cd; font-weight: 600; }
         #sectionTitle { font-size: 14px; font-weight: 600; color: #263238; }
         #caption { color: #607d8b; font-size: 11px; }
         #stateConnected { color: #087443; font-weight: 600; }
@@ -48,7 +61,11 @@ int main(int argc, char* argv[]) {
         #comboArrowButton:pressed { background: #c6dce8; }
         #primaryButton { background: #285a75; color: white; border-color: #285a75; }
         #primaryButton:hover { background: #356f8d; }
-        #dangerButton { color: #a33a35; }
+        #secondaryButton { background: #ffffff; border-color: #b8c2c9; color: #344054; }
+        #secondaryButton:hover { background: #eef4f6; border-color: #58798a; }
+        #dangerButton { color: #a33a35; background: #ffffff; border-color: #dfc6c4; }
+        #dangerButtonActive { color: #9f2d27; background: #fff5f4; border-color: #dca9a5; font-weight: 600; }
+        #dangerButtonActive:hover { background: #fde8e6; border-color: #bd5b54; }
         QGroupBox { background: transparent; border: 1px solid #d9dfe3; border-radius: 2px; margin-top: 9px; padding: 8px 6px 6px; font-weight: 600; color: #37474f; }
         QGroupBox::title { subcontrol-origin: margin; left: 6px; padding: 0 3px; background: #ffffff; }
         #notice { color: #546e7a; background: #f5f7f8; border-left: 3px solid #78909c; padding: 7px; }

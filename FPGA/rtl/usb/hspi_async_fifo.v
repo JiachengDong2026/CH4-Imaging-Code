@@ -16,8 +16,10 @@ module hspi_async_fifo #(
  wire[PTR_BITS-1:0]rd_bin_next=rd_bin+(rd_en&&!empty);
  wire[PTR_BITS-1:0]wr_gray_next=(wr_bin_next>>1)^wr_bin_next;
  wire[PTR_BITS-1:0]rd_gray_next=(rd_bin_next>>1)^rd_bin_next;
+ wire[PTR_BITS-1:0]wr_bin_plus_one=wr_bin+1'b1;
+ wire[PTR_BITS-1:0]wr_gray_plus_one=(wr_bin_plus_one>>1)^wr_bin_plus_one;
  wire[PTR_BITS-1:0]full_compare={~rd_gray_w2[PTR_BITS-1:PTR_BITS-2],rd_gray_w2[PTR_BITS-3:0]};
- assign full=(wr_gray_next==full_compare);
+ assign full=(wr_gray_plus_one==full_compare);
  assign empty=(rd_gray==wr_gray_r2);
  assign rd_data=mem[rd_bin[ADDR_BITS-1:0]];
  always @(posedge wr_clk)begin

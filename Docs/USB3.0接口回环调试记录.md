@@ -939,3 +939,23 @@ USB3_FUSED_POINT_STREAM_PASS：100 个数据块全部通过，平均读取吞吐
 
 至此，独立CH569流式上传固件、固定融合点FPGA数据源以及上位机读取/协议校验链路
 完成第一阶段硬件验收。下一步将固定测试数据源替换为阶段2真实融合结果输入。
+
+### 15.9 阶段2真实融合结果接入
+
+新增`ch4_real_fused_point_source.v`，复用项目现有HITRAN ROM、25.6 MSPS调度、
+校准、DILA、滑动平滑、1600点扫描成帧和WMS特征提取链路，生成真实48字节
+FUSED_POINT载荷。`usb_fused_point_stream_bridge.v`使用16深度、384位双时钟
+FIFO完成50 MHz成像域到120 MHz USB打包域的跨时钟传输，并统计接受、启动发送
+和丢弃帧数。每次CH569拉高`Tx_Ctrl`时仅取出一帧，保持一请求对应一个HSPI块。
+
+新系统顶层`ch4_usb3_imaging_stream_top.v`保留已验收的30 MHz厂家HSPI TX、
+4096字节块格式以及FIFO显式预取对齐。真实数据bitstream独立输出，不覆盖黄金版本：
+
+```text
+E:\Documents\CH4_Imaging_Code_v2\FPGA\build\usb3_imaging_stream\ch4_usb3_imaging_stream.bit
+SHA-256 = 620FB89DDC9BC92D11198E23025772E7D46F937644C5C72725DF28431AEBB1DF
+```
+
+异步FIFO时钟域已显式声明；最终实现WNS为`+2.069 ns`、WHS为`+0.048 ns`，
+无时序违例、无组合环和未布线网络。配套CH569固件仍使用
+`CH569_USB3_Stream.hex`，无需重新生成。

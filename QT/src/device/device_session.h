@@ -11,15 +11,20 @@
 
 namespace ch4::device {
 class NativeSerial;
+class NativeUsbStream;
 
 class DeviceSession final : public QObject {
     Q_OBJECT
 public:
-    enum class Mode { Mock, Serial };
+    enum class Mode { Mock, Serial, Usb };
     explicit DeviceSession(QObject* parent = nullptr);
     ~DeviceSession() override;
     static QStringList serialPorts();
     bool connectDevice(Mode mode, const QString& portName = {}, int baudRate = 921600);
+    bool connectSerial(const QString& portName, int baudRate = 921600);
+    bool connectUsb();
+    void disconnectSerial();
+    void disconnectUsb();
     void disconnectDevice();
     void start();
     void stop();
@@ -35,10 +40,13 @@ public:
 
 signals:
     void connectionChanged(bool connected, const QString& description);
+    void serialConnectionChanged(bool connected, const QString& description);
+    void usbConnectionChanged(bool connected, const QString& description);
     void runningChanged(bool running);
     void pointReceived(const ch4::model::FusedPoint& point);
     void angleSampleReceived(const ch4::model::AngleSample& sample);
     void harmonicCurveReceived(const ch4::model::HarmonicCurve& curve);
+    void mirrorConnectionChanged(bool connected);
     void logMessage(const QString& message);
     void protocolStatsChanged(quint64 frames, quint64 crcErrors, quint64 discardedBytes);
 
@@ -52,14 +60,18 @@ private:
     void handleFrame(const protocol::Frame& frame);
     model::FusedPoint makeMockPoint();
     NativeSerial* serial_ = nullptr;
+    NativeUsbStream* usb_ = nullptr;
     QTimer mockTimer_;
     QTimer commandTimer_;
     QTimer dataStartTimer_;
     QTimer dataIdleTimer_;
     QQueue<QPair<protocol::MessageType, QByteArray>> commandQueue_;
-    protocol::FrameParser parser_;
+    protocol::FrameParser serialParser_;
+    protocol::FrameParser usbParser_;
     Mode mode_ = Mode::Mock;
     bool connected_ = false;
+    bool serialConnected_ = false;
+    bool usbConnected_ = false;
     bool running_ = false;
     bool dataFlowSeen_ = false;
     quint16 sequence_ = 1;

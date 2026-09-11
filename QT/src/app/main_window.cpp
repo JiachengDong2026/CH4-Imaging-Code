@@ -33,6 +33,7 @@
 #include <QSplitter>
 #include <QStackedWidget>
 #include <QStatusBar>
+#include <QStyle>
 #include <QScrollBar>
 #include <QSyntaxHighlighter>
 #include <QTabBar>
@@ -66,9 +67,16 @@ QLabel* caption(const QString& text, QWidget* parent = nullptr) {
 QLabel* headerFieldLabel(const QString& text, QWidget* parent = nullptr) {
     auto* label = new QLabel(text, parent);
     label->setObjectName(QStringLiteral("headerFieldLabel"));
-    label->setFixedWidth(48);
-    label->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    label->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     return label;
+}
+
+void updateStatusBadge(QLabel* label, const QString& text, const QString& state) {
+    label->setText(QStringLiteral("\u25cf %1").arg(text));
+    label->setProperty("status", state);
+    label->setToolTip(text);
+    label->style()->unpolish(label);
+    label->style()->polish(label);
 }
 
 QFrame* panel(const QString& objectName, QWidget* parent = nullptr) {
@@ -262,7 +270,8 @@ MainWindow::MainWindow(QWidget* parent)
       parameterTabs_(new QTabBar),
       viewTabs_(new QTabBar),
       viewPages_(new QStackedWidget),
-      refreshTimer_(new QTimer(this)) {
+      refreshTimer_(new QTimer(this)),
+      mirrorDetectionTimer_(new QTimer(this)) {
     setWindowTitle(QStringLiteral("CH4 Scan Imaging Console"));
     resize(1540, 920);
     setMinimumSize(1180, 720);
@@ -273,9 +282,9 @@ MainWindow::MainWindow(QWidget* parent)
     rootLayout->setSpacing(10);
 
     auto* header = panel(QStringLiteral("appHeader"));
-    auto* headerLayout = new QHBoxLayout(header);
-    headerLayout->setContentsMargins(12, 8, 12, 8);
-    headerLayout->setSpacing(8);
+    auto* headerLayout = new QVBoxLayout(header);
+    headerLayout->setContentsMargins(12, 6, 12, 6);
+    headerLayout->setSpacing(5);
     auto* title = new QLabel(QStringLiteral("CH4 Scan Imaging"));
     title->setObjectName(QStringLiteral("appTitle"));
     title->setMinimumWidth(175);
@@ -283,10 +292,9 @@ MainWindow::MainWindow(QWidget* parent)
 
     modeBox_ = new QComboBox;
     modeBox_->addItem(QStringLiteral("Mock demonstration"));
-    modeBox_->addItem(QStringLiteral("UART serial"));
-    modeBox_->setFixedWidth(120);
+    modeBox_->addItem(QStringLiteral("USB3 data"));
     portBox_ = new QComboBox;
-    portBox_->setFixedWidth(94);
+    portBox_->setFixedWidth(64);
     baudBox_ = new QComboBox;
     const QList<QPair<QString, int>> baudRates = {{QStringLiteral("115200"), 115200},
                                                   {QStringLiteral("230400"), 230400},
@@ -297,42 +305,98 @@ MainWindow::MainWindow(QWidget* parent)
     for (const auto& baudRate : baudRates)
         baudBox_->addItem(baudRate.first, baudRate.second);
     baudBox_->setCurrentIndex(3);
-    baudBox_->setFixedWidth(82);
-    auto* refreshButton = new QPushButton(QStringLiteral("Refresh"));
+    baudBox_->setFixedWidth(76);
+    auto* refreshButton = new QPushButton;
     refreshButton->setObjectName(QStringLiteral("secondaryButton"));
-    refreshButton->setFixedWidth(66);
+    refreshButton->setIcon(style()->standardIcon(QStyle::SP_BrowserReload));
+    refreshButton->setToolTip(QStringLiteral("Refresh serial ports"));
+    refreshButton->setAccessibleName(QStringLiteral("Refresh serial ports"));
+    refreshButton->setFixedWidth(32);
     connectButton_ = new QPushButton(QStringLiteral("Connect"));
     connectButton_->setObjectName(QStringLiteral("primaryButton"));
-    connectButton_->setFixedWidth(90);
-    connectionLabel_ = new QLabel(QStringLiteral("● Disconnected"));
-    connectionLabel_->setObjectName(QStringLiteral("stateIdle"));
-    connectionLabel_->setMinimumWidth(190);
-    acquisitionLabel_ = new QLabel(QStringLiteral("● Idle"));
-    acquisitionLabel_->setObjectName(QStringLiteral("stateIdle"));
-    acquisitionLabel_->setMinimumWidth(76);
-    headerLayout->addWidget(headerFieldLabel(QStringLiteral("Source")));
-    headerLayout->addWidget(modeBox_);
-    headerLayout->addWidget(headerFieldLabel(QStringLiteral("Port")));
-    headerLayout->addWidget(portBox_);
-    headerLayout->addWidget(headerFieldLabel(QStringLiteral("Baud")));
-    headerLayout->addWidget(baudBox_);
-    headerLayout->addWidget(refreshButton);
-    headerLayout->addWidget(connectButton_);
-    headerLayout->addSpacing(8);
-    headerLayout->addWidget(connectionLabel_);
-    headerLayout->addWidget(acquisitionLabel_);
+    connectButton_->setFixedWidth(84);
+    usbConnectButton_ = new QPushButton(QStringLiteral("Connect USB"));
+    usbConnectButton_->setObjectName(QStringLiteral("primaryButton"));
+    usbConnectButton_->setFixedWidth(90);
+    connectionLabel_ = new QLabel;
+    usbConnectionLabel_ = new QLabel;
+    acquisitionLabel_ = new QLabel;
+    const QList<QWidget*> headerControls = {modeBox_, portBox_, baudBox_, refreshButton, connectButton_,
+                                            usbConnectButton_, connectionLabel_, usbConnectionLabel_,
+                                            acquisitionLabel_};
+    for (QWidget* controlWidget : headerControls) {
+        controlWidget->setProperty("headerControl", true);
+        controlWidget->setFixedHeight(32);
+    }
+    connectionLabel_->setFixedWidth(90);
+    usbConnectionLabel_->setFixedWidth(90);
+    acquisitionLabel_->setFixedWidth(80);
+    updateStatusBadge(connectionLabel_, QStringLiteral("Disconnected"), QStringLiteral("disconnected"));
+    updateStatusBadge(usbConnectionLabel_, QStringLiteral("Disconnected"), QStringLiteral("disconnected"));
+    updateStatusBadge(acquisitionLabel_, QStringLiteral("Idle"), QStringLiteral("idle"));
+    auto makeModule = [](const QString& name) {
+        auto* box = new QFrame;
+        box->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        auto* layout = new QVBoxLayout(box);
+        layout->setContentsMargins(8, 5, 8, 6);
+        layout->setSpacing(4);
+        auto* label = new QLabel(name);
+        label->setObjectName(QStringLiteral("moduleTitle"));
+        layout->addWidget(label);
+        return qMakePair(box, layout);
+    };
+    auto control = makeModule(QStringLiteral("Control link"));
+    control.first->setObjectName(QStringLiteral("controlLinkModule"));
+    auto* uartRow = new QHBoxLayout;
+    uartRow->setSpacing(5);
+    uartRow->addWidget(headerFieldLabel(QStringLiteral("Port")));
+    uartRow->addWidget(portBox_);
+    uartRow->addWidget(headerFieldLabel(QStringLiteral("Baud")));
+    uartRow->addWidget(baudBox_);
+    uartRow->addWidget(refreshButton);
+    uartRow->addWidget(connectButton_);
+    uartRow->addWidget(connectionLabel_);
+    uartRow->addStretch(1);
+    control.second->addLayout(uartRow);
+    auto data = makeModule(QStringLiteral("Data link"));
+    data.first->setObjectName(QStringLiteral("dataLinkModule"));
+    auto* usbType = new QLabel(QStringLiteral("USB 3.0"));
+    usbType->setObjectName(QStringLiteral("interfaceName"));
+    auto* usbRow = new QHBoxLayout;
+    usbRow->setSpacing(6);
+    usbRow->addWidget(usbType);
+    usbRow->addWidget(usbConnectButton_);
+    usbRow->addWidget(usbConnectionLabel_);
+    usbRow->addStretch(1);
+    data.second->addLayout(usbRow);
     startButton_ = new QPushButton(QStringLiteral("Start acquisition"));
     startButton_->setObjectName(QStringLiteral("primaryButton"));
+    startButton_->setFixedSize(112, 32);
+    startButton_->setEnabled(false);
     stopButton_ = new QPushButton(QStringLiteral("Stop"));
     stopButton_->setObjectName(QStringLiteral("dangerButton"));
-    startButton_->setEnabled(false);
+    stopButton_->setFixedSize(50, 32);
     stopButton_->setEnabled(false);
-    startButton_->setFixedWidth(138);
-    stopButton_->setFixedWidth(68);
-    headerLayout->addWidget(startButton_);
-    headerLayout->addWidget(stopButton_);
-    headerLayout->addStretch(1);
-    header->setMaximumHeight(72);
+    auto acq = makeModule(QStringLiteral("Acquisition"));
+    acq.first->setObjectName(QStringLiteral("acquisitionModule"));
+    auto* acqRow = new QHBoxLayout;
+    acqRow->setSpacing(6);
+    acqRow->addWidget(headerFieldLabel(QStringLiteral("Source")));
+    modeBox_->setMinimumWidth(90);
+    modeBox_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    acqRow->addWidget(modeBox_, 1);
+    acqRow->addWidget(acquisitionLabel_);
+    acqRow->addWidget(startButton_);
+    acqRow->addWidget(stopButton_);
+    acq.second->addLayout(acqRow);
+    auto* modules = new QHBoxLayout;
+    modules->setContentsMargins(0, 0, 0, 0);
+    modules->setSpacing(12);
+    modules->addWidget(control.first, 43);
+    modules->addWidget(data.first, 21);
+    modules->addWidget(acq.first, 36);
+    headerLayout->addLayout(modules);
+    header->setMaximumHeight(104);
     rootLayout->addWidget(header);
 
     auto* body = new QSplitter(Qt::Horizontal);
@@ -471,37 +535,71 @@ MainWindow::MainWindow(QWidget* parent)
     connect(startButton_, &QPushButton::clicked, this, &MainWindow::startRun);
     connect(stopButton_, &QPushButton::clicked, this, &MainWindow::stopRun);
     connect(clearViewButton_, &QPushButton::clicked, this, &MainWindow::clearCurrentView);
+    connect(usbConnectButton_, &QPushButton::clicked, this, [this] {
+        if (usbConnected_) { session_->disconnectUsb(); return; }
+        session_->connectUsb();
+    });
+    connect(session_, &device::DeviceSession::usbConnectionChanged, this, [this](bool ok, const QString& detail) {
+        usbConnected_ = ok;
+        updateStatusBadge(usbConnectionLabel_, ok ? QStringLiteral("Connected") : QStringLiteral("Disconnected"),
+                          ok ? QStringLiteral("connected") : QStringLiteral("disconnected"));
+        usbConnectionLabel_->setToolTip(detail);
+        usbConnectButton_->setText(ok ? QStringLiteral("Disconnect") : QStringLiteral("Connect USB"));
+        const bool sourceReady = modeBox_->currentIndex() == 0 || (modeBox_->currentIndex() == 1 && usbConnected_ && uartConnected_);
+        startButton_->setEnabled(sourceReady && !session_->running());
+        if (!ok && !detail.isEmpty()) appendLog(QStringLiteral("ERROR USB3: %1").arg(detail));
+    });
+    connect(session_, &device::DeviceSession::serialConnectionChanged, this,
+            [this](bool ok, const QString& detail) {
+                uartConnected_ = ok;
+                updateStatusBadge(connectionLabel_, ok ? QStringLiteral("Connected") : QStringLiteral("Disconnected"),
+                                  ok ? QStringLiteral("connected") : QStringLiteral("disconnected"));
+                connectionLabel_->setToolTip(detail);
+                connectButton_->setText(ok ? QStringLiteral("Disconnect") : QStringLiteral("Connect"));
+                connectButton_->setObjectName(ok ? QStringLiteral("secondaryButton")
+                                                 : QStringLiteral("primaryButton"));
+                connectButton_->style()->unpolish(connectButton_);
+                connectButton_->style()->polish(connectButton_);
+                portBox_->setEnabled(!ok);
+                baudBox_->setEnabled(!ok);
+            });
     connect(clearLogButton, &QPushButton::clicked, this, &MainWindow::clearLog);
     connect(viewTabs_, &QTabBar::currentChanged, this, [this](int index) {
         clearViewButton_->setText(index == 0 ? QStringLiteral("Clear trajectory")
                                    : index == 1 ? QStringLiteral("Clear waveform")
                                                 : QStringLiteral("Clear image"));
     });
-    connect(modeBox_, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int index) {
-        portBox_->setEnabled(index == 1);
-        baudBox_->setEnabled(index == 1);
+    connect(modeBox_, qOverload<int>(&QComboBox::currentIndexChanged), this, [this] {
+        const int source = modeBox_->currentIndex();
+        const bool ready = source == 0 || (source == 1 && usbConnected_ && uartConnected_);
+        startButton_->setEnabled(ready && !session_->running());
+        updateStreamRateRange();
     });
     connect(session_, &device::DeviceSession::connectionChanged, this,
             [this](bool connected, const QString& detail) {
-                const bool mock = connected && modeBox_->currentIndex() == 0;
-                connectionLabel_->setText(connected ? (mock ? QStringLiteral("● Mock mode")
-                                                              : QStringLiteral("● Connected · %1").arg(detail))
-                                                     : QStringLiteral("● Disconnected"));
-                connectionLabel_->setObjectName(connected ? QStringLiteral("stateConnected") : QStringLiteral("stateIdle"));
-                connectionLabel_->style()->unpolish(connectionLabel_);
-                connectionLabel_->style()->polish(connectionLabel_);
-                connectButton_->setText(connected ? QStringLiteral("Disconnect") : QStringLiteral("Connect"));
-                modeBox_->setEnabled(!connected);
-                portBox_->setEnabled(!connected && modeBox_->currentIndex() == 1);
-                baudBox_->setEnabled(!connected && modeBox_->currentIndex() == 1);
-                connectButton_->setObjectName(connected ? QStringLiteral("secondaryButton") : QStringLiteral("primaryButton"));
+                const bool mock = connected && detail.startsWith(QStringLiteral("Mock"));
+                const bool uart = connected && detail.startsWith(QStringLiteral("UART"));
+                if (uart || (!connected && uartConnected_)) {
+                    uartConnected_ = uart;
+                    updateStatusBadge(connectionLabel_, uart ? QStringLiteral("Connected")
+                                                             : QStringLiteral("Disconnected"),
+                                      uart ? QStringLiteral("connected") : QStringLiteral("disconnected"));
+                    connectionLabel_->setToolTip(detail);
+                    connectButton_->setText(uart ? QStringLiteral("Disconnect") : QStringLiteral("Connect"));
+                }
+                modeBox_->setEnabled(true);
+                portBox_->setEnabled(!uartConnected_);
+                baudBox_->setEnabled(!uartConnected_);
+                connectButton_->setObjectName(uartConnected_ ? QStringLiteral("secondaryButton") : QStringLiteral("primaryButton"));
                 connectButton_->style()->unpolish(connectButton_);
                 connectButton_->style()->polish(connectButton_);
-                startButton_->setEnabled(connected && !session_->running());
-                stopButton_->setEnabled(connected && session_->running());
+                const bool sourceReady = modeBox_->currentIndex() == 0 || (modeBox_->currentIndex() == 1 && usbConnected_ && uartConnected_);
+                startButton_->setEnabled(sourceReady && !session_->running());
+                stopButton_->setEnabled(sourceReady && session_->running());
                 if (!connected) {
-                    acquisitionLabel_->setText(QStringLiteral("● Idle"));
-                    acquisitionLabel_->setObjectName(QStringLiteral("stateIdle"));
+                    mirrorDetectionTimer_->stop();
+                    streamAngles_->setEnabled(true);
+                    updateStatusBadge(acquisitionLabel_, QStringLiteral("Idle"), QStringLiteral("idle"));
                 }
                 statusBar()->showMessage(connected ? (mock ? QStringLiteral("Mock mode connected.")
                                                              : QStringLiteral("Connected to %1.").arg(detail))
@@ -509,15 +607,36 @@ MainWindow::MainWindow(QWidget* parent)
             });
     connect(session_, &device::DeviceSession::runningChanged, this,
             [this](bool running) {
-                startButton_->setEnabled(session_->connected() && !running);
-                stopButton_->setEnabled(session_->connected() && running);
-                acquisitionLabel_->setText(running ? QStringLiteral("● Running") : QStringLiteral("● Idle"));
-                acquisitionLabel_->setObjectName(running ? QStringLiteral("stateRunning") : QStringLiteral("stateIdle"));
-                acquisitionLabel_->style()->unpolish(acquisitionLabel_);
-                acquisitionLabel_->style()->polish(acquisitionLabel_);
+                modeBox_->setEnabled(!running);
+                const bool sourceReady = modeBox_->currentIndex() == 0 || (modeBox_->currentIndex() == 1 && usbConnected_ && uartConnected_);
+                startButton_->setEnabled(sourceReady && !running);
+                stopButton_->setEnabled(sourceReady && running);
+                updateStatusBadge(acquisitionLabel_, running ? QStringLiteral("Acquiring") : QStringLiteral("Idle"),
+                                  running ? QStringLiteral("acquiring") : QStringLiteral("idle"));
+                stopButton_->setObjectName(running ? QStringLiteral("dangerButtonActive")
+                                                   : QStringLiteral("dangerButton"));
+                stopButton_->style()->unpolish(stopButton_);
+                stopButton_->style()->polish(stopButton_);
                 statusBar()->showMessage(running ? QStringLiteral("Acquisition started.") : QStringLiteral("Acquisition stopped."));
             });
     connect(session_, &device::DeviceSession::pointReceived, this, &MainWindow::onPoint);
+    mirrorDetectionTimer_->setSingleShot(true);
+    mirrorDetectionTimer_->setInterval(1500);
+    connect(mirrorDetectionTimer_, &QTimer::timeout, this, [this] {
+        if (!streamAngles_->isChecked())
+            return;
+        streamAngles_->setChecked(false);
+        streamAngles_->setEnabled(false);
+        appendLog(QStringLiteral("WARNING  快反镜反馈超时，已禁止发送扫描轨迹。"));
+        statusBar()->showMessage(QStringLiteral("快反镜未接入，无法发送扫描轨迹。"), 3000);
+    });
+    connect(session_, &device::DeviceSession::mirrorConnectionChanged, this, [this](bool connected) {
+        mirrorFeedbackActive_ = connected;
+        if (connected) {
+            mirrorDetectionTimer_->stop();
+            streamAngles_->setEnabled(true);
+        }
+    });
     connect(session_, &device::DeviceSession::angleSampleReceived, this, [this](const model::AngleSample& sample) {
         trajectory_->append(sample.xDegrees(), sample.yDegrees());
         recorder_->append(sample);
@@ -607,11 +726,11 @@ QWidget* MainWindow::mirrorPage() {
     feedback_ = integerSpinBox(100, 2500, 2000, QStringLiteral(" Hz"));
     lines_ = integerSpinBox(2, 2048, 75, QStringLiteral(" lines"));
     lines_->setReadOnly(true);
-    streamRate_ = integerSpinBox(1, 2000, 500, QStringLiteral(" points/s"));
+    streamRate_ = integerSpinBox(1, 2000, 2000, QStringLiteral(" points/s"));
     streamAngles_ = new QCheckBox(QStringLiteral("Send scan trajectory (angle)"));
-    streamAngles_->setChecked(true);
+    streamAngles_->setChecked(false);
     streamHarmonics_ = new QCheckBox(QStringLiteral("Send harmonic waveform (I/Q)"));
-    streamHarmonics_->setChecked(false);
+    streamHarmonics_->setChecked(true);
     scanPolicy_ = new QComboBox;
     scanPolicy_->addItems({QStringLiteral("Frequency priority"), QStringLiteral("Waveform priority")});
     scanPolicy_->setCurrentIndex(1);
@@ -634,8 +753,8 @@ QWidget* MainWindow::mirrorPage() {
     applyButton->setObjectName(QStringLiteral("primaryButton"));
     form->addRow(QString(), applyButton);
     connect(applyButton, &QPushButton::clicked, this, &MainWindow::applyMirrorConfig);
-    connect(streamAngles_, &QCheckBox::toggled, this, [this] { updateStreamRateRange(); session_->setStreamSelection(streamAngles_->isChecked(), streamHarmonics_->isChecked()); });
-    connect(streamHarmonics_, &QCheckBox::toggled, this, [this] { updateStreamRateRange(); session_->setStreamSelection(streamAngles_->isChecked(), streamHarmonics_->isChecked()); });
+    connect(streamAngles_, &QCheckBox::toggled, this, [this](bool enabled) { if(!enabled)trajectory_->clear();updateStreamRateRange();session_->setStreamSelection(streamAngles_->isChecked(),streamHarmonics_->isChecked()); });
+    connect(streamHarmonics_, &QCheckBox::toggled, this, [this](bool enabled) { if(!enabled)harmonic_->clear();updateStreamRateRange();session_->setStreamSelection(streamAngles_->isChecked(),streamHarmonics_->isChecked()); });
     connect(xFrequency_, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this] { updateScanGeometry(); });
     connect(frameFrequency_, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this] { updateScanGeometry(); });
     updateScanGeometry();
@@ -755,19 +874,12 @@ void MainWindow::refreshPorts() {
 }
 
 void MainWindow::toggleConnection() {
-    if (session_->connected()) {
-        session_->disconnectDevice();
-        return;
-    }
+    if (uartConnected_) { session_->disconnectSerial(); return; }
+    if (session_->connectSerial(portBox_->currentText(), baudBox_->currentData().toInt())) return;
 
-    const auto mode = modeBox_->currentIndex() == 0 ? device::DeviceSession::Mode::Mock : device::DeviceSession::Mode::Serial;
-    const int baudRate = baudBox_->currentData().toInt();
-    if (!session_->connectDevice(mode, portBox_->currentText(), baudRate) && mode == device::DeviceSession::Mode::Serial) {
-        connectionLabel_->setText(QStringLiteral("● Connection error"));
-        connectionLabel_->setObjectName(QStringLiteral("stateError"));
-        connectionLabel_->style()->unpolish(connectionLabel_);
-        connectionLabel_->style()->polish(connectionLabel_);
-        statusBar()->showMessage(QStringLiteral("Connection error. Check the selected serial port."));
+    {
+        updateStatusBadge(connectionLabel_, QStringLiteral("Error"), QStringLiteral("error"));
+        statusBar()->showMessage(QStringLiteral("Connection error. Check the selected interface and whether another program is using it."));
         QMessageBox::warning(this, QStringLiteral("Connection failed"),
                              QStringLiteral("Check that the selected serial port exists and is not in use."));
     }
@@ -782,7 +894,7 @@ void MainWindow::startRun() {
     harmonic_->clear();
     image_->clear();
     session_->setStreamSelection(streamAngles_->isChecked(), streamHarmonics_->isChecked());
-    const QString mode = modeBox_->currentIndex() == 0 ? QStringLiteral("mock") : QStringLiteral("uart");
+    const QString mode = modeBox_->currentIndex() == 0 ? QStringLiteral("mock") : QStringLiteral("usb3");
     if (saveData_->isChecked()) {
         if (!recorder_->start(recordingDirectory_->text(), mode))
             appendLog(QStringLiteral("WARNING  Unable to create the session record."));
@@ -793,9 +905,12 @@ void MainWindow::startRun() {
         appendLog(QStringLiteral("INFO  Acquisition data recording is disabled."));
     }
     session_->start();
+    if (streamAngles_->isChecked())
+        mirrorDetectionTimer_->start();
 }
 
 void MainWindow::stopRun() {
+    mirrorDetectionTimer_->stop();
     session_->stop();
     recorder_->stop();
 }
@@ -983,13 +1098,20 @@ void MainWindow::loadRecordedData() {
 }
 
 void MainWindow::onPoint(const model::FusedPoint& point) {
-    if (!streamAngles_->isChecked() || !streamHarmonics_->isChecked())
-        return;
     mirrorFeedbackActive_ = (point.flags & 0x0010u) != 0;
     displayingRecordedData_ = false;
     ++pointCount_;
-    image_->add(point);
     recorder_->append(point);
+
+    // FUSED_POINT drives the spatial image. Dedicated HARMONIC_CURVE frames
+    // drive the waveform, so a point must not be treated as a curve sample.
+    if (streamAngles_->isChecked()) {
+        trajectory_->append(point.xDegrees(), point.yDegrees());
+        xAngleValue_->setText(QStringLiteral("%1°").arg(point.xDegrees(), 0, 'f', 3));
+        yAngleValue_->setText(QStringLiteral("%1°").arg(point.yDegrees(), 0, 'f', 3));
+    }
+    if (streamAngles_->isChecked() && streamHarmonics_->isChecked())
+        image_->add(point);
     dirty_ = true;
 }
 
@@ -1075,7 +1197,8 @@ void MainWindow::updateScanGeometry() {
 void MainWindow::updateStreamRateRange() {
     // A 48-byte fused frame exceeds 921600 baud at 2 kHz.  Single-stream
     // operation is safe at 2 kHz; keep the legacy 500 Hz cap for fused data.
-    const int maximumRate = streamAngles_->isChecked() && streamHarmonics_->isChecked() ? 500 : 2000;
+    const bool usbMode = modeBox_ && modeBox_->currentIndex() == 1;
+    const int maximumRate = !usbMode && streamAngles_->isChecked() && streamHarmonics_->isChecked() ? 500 : 2000;
     streamRate_->setMaximum(maximumRate);
     if (streamRate_->value() > maximumRate)
         streamRate_->setValue(maximumRate);

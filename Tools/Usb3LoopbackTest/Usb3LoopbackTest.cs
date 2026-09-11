@@ -112,7 +112,7 @@ internal static class Usb3LoopbackTest
             ? "ACX750-CH569 USB3.0 融合点流式接收测试"
             : "ACX750-CH569 USB3.0 最小回环测试");
         string route = streamMode
-            ? "USB EP 0x81 IN（FUSED_POINT流）"
+            ? "USB EP 0x81 IN（每块67个FUSED_POINT）"
             : readOnly
             ? "USB EP 0x81 IN（只读上一笔诊断）"
             : writeOnly
@@ -162,6 +162,7 @@ internal static class Usb3LoopbackTest
             var rx = new byte[transferSize];
             long totalBytes = 0;
             bool sawDiagnosticPass = false;
+            int expectedStreamSequence = -1;
             var totalTimer = Stopwatch.StartNew();
 
             for (int iteration = 0; iteration < iterations; iteration++)
@@ -244,8 +245,11 @@ internal static class Usb3LoopbackTest
 
                 if (streamMode)
                 {
-                    if (!ValidateFusedPointStreamBlock(rx, -1))
+                    int receivedSequence;
+                    if (!ValidateFusedPointStreamBlock(rx, expectedStreamSequence,
+                        out receivedSequence))
                         return 16;
+                    expectedStreamSequence = (receivedSequence + 1) & 0xFFFF;
                     totalBytes += transferSize;
                     Console.WriteLine("[{0}/{1}] USB3_STREAM_BLOCK_PASS，数据块索引 {2}。",
                         iteration + 1, iterations, iteration);
@@ -313,42 +317,78 @@ internal static class Usb3LoopbackTest
         }
     }
 
-    private static bool ValidateFusedPointStreamBlock(byte[] data, int expectedSequence)
+    private static bool ValidateFusedPointStreamBlock(
+        byte[] data, int expectedSequence, out int receivedSequence)
     {
+        receivedSequence = -1;
         const int payloadLength = 48;
         const int frameLength = 13 + payloadLength;
-        if (data.Length != DefaultTransferSize ||
-            data[0] != 0xA5 || data[1] != 0x5A || data[2] != 0x01 ||
-            data[3] != 0x00 || data[4] != 0x01 || data[5] != 0x62 ||
-            data[6] != 0x40 || data[9] != payloadLength || data[10] != 0x00)
+        const int framesPerBlock = 67;
+        int firstSequence = -1;
+        uint firstImageId = 0;
+        uint lastImageId = 0;
+        ushort firstPointId = 0;
+        ushort lastPointId = 0;
+
+        if (data.Length != DefaultTransferSize)
         {
-            Console.Error.WriteLine("USB3_STREAM_FAIL：统一应用帧头或FUSED_POINT类型错误。");
-            Console.Error.Write("首部16字节：");
-            for (int i = 0; i < 16; i++)
-                Console.Error.Write("{0:X2}{1}", data[i], i == 15 ? Environment.NewLine : " ");
+            Console.Error.WriteLine("USB3_STREAM_FAIL：数据块长度不是4096字节。");
             return false;
         }
 
-        int sequence = data[7] | (data[8] << 8);
-        if (expectedSequence >= 0 && sequence != (expectedSequence & 0xFFFF))
+        for (int frameIndex = 0; frameIndex < framesPerBlock; frameIndex++)
         {
-            Console.Error.WriteLine("USB3_STREAM_FAIL：期望应用序号 {0}，收到 {1}。",
-                expectedSequence & 0xFFFF, sequence);
-            return false;
+            int offset = frameIndex * frameLength;
+            if (data[offset] != 0xA5 || data[offset + 1] != 0x5A ||
+                data[offset + 2] != 0x01 || data[offset + 3] != 0x00 ||
+                data[offset + 4] != 0x01 || data[offset + 5] != 0x62 ||
+                data[offset + 6] != 0x40 || data[offset + 9] != payloadLength ||
+                data[offset + 10] != 0x00)
+            {
+                Console.Error.WriteLine(
+                    "USB3_STREAM_FAIL：块内第 {0}/67 帧的帧头或类型错误，偏移0x{1:X4}。",
+                    frameIndex + 1, offset);
+                return false;
+            }
+
+            int sequence = data[offset + 7] | (data[offset + 8] << 8);
+            if (frameIndex == 0)
+                firstSequence = sequence;
+            if (expectedSequence >= 0 && sequence != (expectedSequence & 0xFFFF))
+            {
+                Console.Error.WriteLine(
+                    "USB3_STREAM_FAIL：块内第 {0}/67 帧期望序号 {1}，收到 {2}。",
+                    frameIndex + 1, expectedSequence & 0xFFFF, sequence);
+                return false;
+            }
+
+            ushort crc = 0xFFFF;
+            for (int i = 2; i < 11 + payloadLength; i++)
+                crc = Crc16CcittFalse(crc, data[offset + i]);
+            int receivedCrc = data[offset + 11 + payloadLength] |
+                              (data[offset + 12 + payloadLength] << 8);
+            if (receivedCrc != crc)
+            {
+                Console.Error.WriteLine(
+                    "USB3_STREAM_FAIL：块内第 {0}/67 帧CRC16期望0x{1:X4}，收到0x{2:X4}。",
+                    frameIndex + 1, crc, receivedCrc);
+                return false;
+            }
+
+            uint imageId = BitConverter.ToUInt32(data, offset + 19);
+            ushort pointId = BitConverter.ToUInt16(data, offset + 25);
+            if (frameIndex == 0)
+            {
+                firstImageId = imageId;
+                firstPointId = pointId;
+            }
+            lastImageId = imageId;
+            lastPointId = pointId;
+            receivedSequence = sequence;
+            expectedSequence = (sequence + 1) & 0xFFFF;
         }
 
-        ushort crc = 0xFFFF;
-        for (int i = 2; i < 11 + payloadLength; i++)
-            crc = Crc16CcittFalse(crc, data[i]);
-        int receivedCrc = data[11 + payloadLength] | (data[12 + payloadLength] << 8);
-        if (receivedCrc != crc)
-        {
-            Console.Error.WriteLine("USB3_STREAM_FAIL：CRC16期望0x{0:X4}，收到0x{1:X4}。",
-                crc, receivedCrc);
-            return false;
-        }
-
-        for (int i = frameLength; i < data.Length; i++)
+        for (int i = framesPerBlock * frameLength; i < data.Length; i++)
         {
             if (data[i] != 0)
             {
@@ -358,10 +398,10 @@ internal static class Usb3LoopbackTest
             }
         }
 
-        uint imageId = BitConverter.ToUInt32(data, 19);
-        ushort pointId = BitConverter.ToUInt16(data, 25);
-        Console.WriteLine("FUSED_POINT sequence={0} image_id=0x{1:X8} point_id={2} crc16=0x{3:X4}",
-            sequence, imageId, pointId, crc);
+        Console.WriteLine(
+            "FUSED_POINT_BATCH frames=67 sequence={0}..{1} image_id=0x{2:X8}..0x{3:X8} point_id={4}..{5}",
+            firstSequence, receivedSequence, firstImageId, lastImageId,
+            firstPointId, lastPointId);
         return true;
     }
 

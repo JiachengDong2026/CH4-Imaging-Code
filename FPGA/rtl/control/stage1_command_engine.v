@@ -27,8 +27,8 @@ module stage1_command_engine(
   if(rst)begin
    for(k=0;k<8;k=k+1)payload[k]<=0;response_pending<=0;response_type<=0;response_sequence<=0;response_payload<=0;
    scan_enable<=0;scan_start_strobe<=0;acquisition_enable<=0;stream_enable<=0;stream_angle_enable<=1;stream_harmonic_enable<=1;config_revision<=0;commit_pending<=0;config_valid<=1;
-   sx_min<=-16'sd8192;sx_max<=16'sd8192;sy_min<=-16'sd8192;sy_max<=16'sd8192;s_lines<=75;s_stream_rate<=500;s_x_freq_mhz<=15000;s_frame_freq_mhz<=400;s_feedback_hz<=2000;s_scan_policy<=1;s_stop_action<=0;
-   x_min_q13<=-16'sd8192;x_max_q13<=16'sd8192;y_min_q13<=-16'sd8192;y_max_q13<=16'sd8192;image_lines<=75;stream_rate_hz<=500;mirror_x_freq_mhz<=15000;mirror_frame_freq_mhz<=400;mirror_feedback_hz<=2000;scan_policy<=1;stop_action<=0;static_x_q13<=0;static_y_q13<=0;
+   sx_min<=-16'sd8192;sx_max<=16'sd8192;sy_min<=-16'sd8192;sy_max<=16'sd8192;s_lines<=75;s_stream_rate<=2000;s_x_freq_mhz<=15000;s_frame_freq_mhz<=400;s_feedback_hz<=2000;s_scan_policy<=1;s_stop_action<=0;
+   x_min_q13<=-16'sd8192;x_max_q13<=16'sd8192;y_min_q13<=-16'sd8192;y_max_q13<=16'sd8192;image_lines<=75;stream_rate_hz<=2000;mirror_x_freq_mhz<=15000;mirror_frame_freq_mhz<=400;mirror_feedback_hz<=2000;scan_policy<=1;stop_action<=0;static_x_q13<=0;static_y_q13<=0;
   end else begin
    scan_start_strobe<=0;
    // A completed one-shot raster stops the signal-processing and host data
