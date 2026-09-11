@@ -2,7 +2,7 @@
 
 Artix-7 `xc7a200tfbg484-2`、50 MHz 工程。阶段 1 顶层已经接入 25.6 MSPS HITRAN ROM、真实 1f/2f 正交解调、特征提取、内部 Z 字演示轨迹、48 字节融合点和 UART 命令/数据发送。
 
-快反镜原生 9 字节链路已接入顶层，使用 4.608 Mbps UART 和 `LVDS_25` 差分接口；引脚约束与现有 `uart_bridge_v4` 一致：接收 `C18/C19`，发送 `E19/D19`。上板前仍需确认板卡 Bank 电压和外部收发器电气连接。
+快反镜原生 9 字节链路已接入顶层，使用 4.608 Mbps UART 和 `LVDS_25` 差分接口；当前引脚约束为：接收 `F19/F20`，发送 `F18/E18`。上板前仍需确认板卡 Bank 电压和外部收发器电气连接。
 
 ```powershell
 .\scripts\build.ps1 -RunTests

@@ -4,6 +4,8 @@
 /Data/*
 !/Data/README.md
 /tmp/
+/.local/
+/xsim.dir/
 
 # Qt / CMake
 /QT/build/
